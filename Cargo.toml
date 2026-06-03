@@ -1,0 +1,37 @@
+[package]
+name = "fasteetf"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95.0"
+license = "LGPL-3.0-or-later"
+keywords = ["erlang", "eetf", "parser", "serializer", "deserializer"]
+repository = "https://github.com/MuntasirSZN/fasteetf"
+categories = ["embedded", "encoding", "no-std", "no-std::no-alloc", "parser-implementations"]
+description = "A extremely fast, rust-based, no-std EETF (Erlang External Term Format) parser/encoder/(de)serializer"
+homepage = "https://github.com/MuntasirSZN/fasteetf"
+include = ["/src", "LICENSE", "/examples", "/benches"]
+
+[features]
+default = ["std", "compression"]
+alloc = []
+std = ["alloc", "thiserror/std"]
+compression = ["zlib-rs", "alloc"]
+serde = ["dep:serde", "alloc"]
+
+[dependencies]
+serde = { version = "1", default-features = false, features = ["alloc"], optional = true }
+thiserror = { version = "2", default-features = false }
+zlib-rs = { version = "0.6.3", default-features = false, features = [
+  "vpclmulqdq",
+  "avx512",
+  "rust-allocator",
+], optional = true }
+
+[dev-dependencies]
+divan = "0.1"
+proptest = "1"
+serde_json = "1"
+
+[[bench]]
+name = "parse"
+harness = false
