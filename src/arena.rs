@@ -10,18 +10,16 @@ use crate::error::EtfError;
 /// that `alloc_slice::<Term>` and `alloc_slice::<(Term, Term)>` never need
 /// alignment arithmetic on the hot path.
 ///
-/// Also carries the [`Limits`] reference and a `remaining_depth` counter
-/// that replaces the separate `depth` parameter in the parser — this
-/// reduces `parse_term` from 4 parameters to 2, saving register pressure
-/// across recursive calls.
+/// Resource limits (including the recursion depth budget) are accessed
+/// directly through the caller-supplied `Limits` reference and are not
+/// stored on the arena — this keeps `Bump` to a single 32-byte payload
+/// (ptr, end, limits pointer) that the compiler can keep in registers
+/// across the recursive parse.
 pub(crate) struct Bump<'a> {
     /// Current allocation pointer (always aligned to max_align_t after init).
     ptr: *mut u8,
     /// End of the buffer (one past the last valid byte).
     end: *mut u8,
-    /// How many more nesting levels we may descend into compound terms.
-    /// Checked before the tag dispatch in `parser::parse_term`.
-    pub(crate) remaining_depth: usize,
     /// Pointer to the caller-supplied resource limits.  Stored as a raw
     /// pointer so we don't force a co-lifetime between the arena buffer
     /// and the limits structure.
@@ -35,11 +33,7 @@ impl<'a> Bump<'a> {
     /// The initial pointer is advanced to the next `max_align_t` boundary
     /// to guarantee that all subsequent `alloc_slice` calls start at a
     /// well-aligned address without runtime alignment fixups.
-    pub(crate) fn new(
-        buffer: &'a mut [MaybeUninit<u8>],
-        remaining_depth: usize,
-        limits: &Limits,
-    ) -> Self {
+    pub(crate) fn new(buffer: &'a mut [MaybeUninit<u8>], limits: &Limits) -> Self {
         let raw_start = buffer.as_mut_ptr() as *mut u8;
         let cap = buffer.len();
         let raw_end = unsafe { raw_start.add(cap) };
@@ -57,7 +51,6 @@ impl<'a> Bump<'a> {
         Bump {
             ptr,
             end: raw_end,
-            remaining_depth,
             limits,
             _marker: PhantomData,
         }

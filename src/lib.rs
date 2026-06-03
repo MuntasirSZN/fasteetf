@@ -109,54 +109,48 @@ pub fn parse_etf<'a>(options: ParseOptions<'a>) -> Result<Term<'a>, EtfError> {
         return Err(EtfError::InvalidMagicNumber);
     }
 
-    // ── Compression wrapper ────────────────────────────────────────────
+    // Hot path: not compressed.  Branch is laid out so the common case
+    // is fall-through (no jump on the common path).
+    if cursor.data.first() != Some(&tags::COMPRESSED) {
+        let mut arena = arena::Bump::new(options.ast_arena, &options.limits);
+        let mut depth = options.limits.max_depth + 1;
+        return parser::parse_term(&mut cursor, &mut arena, &mut depth);
+    }
+
+    // ── Cold path: compression wrapper ───────────────────────────────────
     // Peek at the next byte without advancing.  If it is the COMPRESSED
     // (80) tag we transparently decompress before recursing.
-    if cursor.data.first() == Some(&tags::COMPRESSED) {
-        #[cfg(not(feature = "compression"))]
-        {
-            let _ = cursor; // suppress unused
-            return Err(EtfError::UnsupportedTag(tags::COMPRESSED));
+    #[cfg(not(feature = "compression"))]
+    {
+        let _ = cursor; // suppress unused
+        return Err(EtfError::UnsupportedTag(tags::COMPRESSED));
+    }
+
+    #[cfg(feature = "compression")]
+    {
+        cursor.take(1)?; // consume tag 80
+        let uncompressed_size = cursor.read_u32()? as usize;
+
+        let decomp_buf = options
+            .decompressed_buffer
+            .ok_or(EtfError::InsufficientDecompressionBuffer)?;
+
+        if decomp_buf.len() < uncompressed_size {
+            return Err(EtfError::InsufficientDecompressionBuffer);
         }
 
-        #[cfg(feature = "compression")]
-        {
-            cursor.take(1)?; // consume tag 80
-            let uncompressed_size = cursor.read_u32()? as usize;
+        let target_buf = &mut decomp_buf[..uncompressed_size];
 
-            let decomp_buf = options
-                .decompressed_buffer
-                .ok_or(EtfError::InsufficientDecompressionBuffer)?;
-
-            if decomp_buf.len() < uncompressed_size {
-                return Err(EtfError::InsufficientDecompressionBuffer);
-            }
-
-            let target_buf = &mut decomp_buf[..uncompressed_size];
-
-            // One-shot zlib decompression via zlib-rs.
-            let (_, rc) = zlib_rs::decompress_slice(target_buf, cursor.data, Default::default());
-            if rc != zlib_rs::ReturnCode::Ok {
-                return Err(EtfError::DecompressionFailed);
-            }
-
-            let mut dec_cursor = cursor::Cursor::new(target_buf);
-            let mut arena = arena::Bump::new(
-                options.ast_arena,
-                options.limits.max_depth + 1,
-                &options.limits,
-            );
-
-            parser::parse_term(&mut dec_cursor, &mut arena)
+        // One-shot zlib decompression via zlib-rs.
+        let (_, rc) = zlib_rs::decompress_slice(target_buf, cursor.data, Default::default());
+        if rc != zlib_rs::ReturnCode::Ok {
+            return Err(EtfError::DecompressionFailed);
         }
-    } else {
-        let mut arena = arena::Bump::new(
-            options.ast_arena,
-            options.limits.max_depth + 1,
-            &options.limits,
-        );
 
-        parser::parse_term(&mut cursor, &mut arena)
+        let mut dec_cursor = cursor::Cursor::new(target_buf);
+        let mut arena = arena::Bump::new(options.ast_arena, &options.limits);
+        let mut depth = options.limits.max_depth + 1;
+        parser::parse_term(&mut dec_cursor, &mut arena, &mut depth)
     }
 }
 
@@ -211,50 +205,44 @@ pub fn parse_etf_streaming<'a>(options: ParseOptions<'a>) -> Result<Term<'a>, Et
         return Err(EtfError::InvalidMagicNumber);
     }
 
-    // Compression wrapper.
-    if cursor.data.first() == Some(&tags::COMPRESSED) {
-        #[cfg(not(feature = "compression"))]
-        {
-            let _ = cursor;
-            return Err(EtfError::UnsupportedTag(tags::COMPRESSED));
+    // Hot path: not compressed.
+    if cursor.data.first() != Some(&tags::COMPRESSED) {
+        let mut arena = arena::Bump::new(options.ast_arena, &options.limits);
+        let mut depth = options.limits.max_depth + 1;
+        return parser::parse_term(&mut cursor, &mut arena, &mut depth);
+    }
+
+    // Cold path: compression wrapper.
+    #[cfg(not(feature = "compression"))]
+    {
+        let _ = cursor;
+        return Err(EtfError::UnsupportedTag(tags::COMPRESSED));
+    }
+
+    #[cfg(feature = "compression")]
+    {
+        cursor.take(1)?; // consume tag 80
+        let uncompressed_size = cursor.read_u32()? as usize;
+
+        let decomp_buf = options
+            .decompressed_buffer
+            .ok_or(EtfError::InsufficientDecompressionBuffer)?;
+
+        if decomp_buf.len() < uncompressed_size {
+            return Err(EtfError::InsufficientDecompressionBuffer);
         }
 
-        #[cfg(feature = "compression")]
-        {
-            cursor.take(1)?; // consume tag 80
-            let uncompressed_size = cursor.read_u32()? as usize;
+        let target_buf = &mut decomp_buf[..uncompressed_size];
 
-            let decomp_buf = options
-                .decompressed_buffer
-                .ok_or(EtfError::InsufficientDecompressionBuffer)?;
-
-            if decomp_buf.len() < uncompressed_size {
-                return Err(EtfError::InsufficientDecompressionBuffer);
-            }
-
-            let target_buf = &mut decomp_buf[..uncompressed_size];
-
-            let (_, rc) = zlib_rs::decompress_slice(target_buf, cursor.data, Default::default());
-            if rc != zlib_rs::ReturnCode::Ok {
-                return Err(EtfError::DecompressionFailed);
-            }
-
-            let mut dec_cursor = cursor::Cursor::new(target_buf);
-            let mut arena = arena::Bump::new(
-                options.ast_arena,
-                options.limits.max_depth + 1,
-                &options.limits,
-            );
-
-            parser::parse_term(&mut dec_cursor, &mut arena)
+        let (_, rc) = zlib_rs::decompress_slice(target_buf, cursor.data, Default::default());
+        if rc != zlib_rs::ReturnCode::Ok {
+            return Err(EtfError::DecompressionFailed);
         }
-    } else {
-        let mut arena = arena::Bump::new(
-            options.ast_arena,
-            options.limits.max_depth + 1,
-            &options.limits,
-        );
 
-        parser::parse_term(&mut cursor, &mut arena)
+        let mut dec_cursor = cursor::Cursor::new(target_buf);
+        let mut arena = arena::Bump::new(options.ast_arena, &options.limits);
+        let mut depth = options.limits.max_depth + 1;
+
+        parser::parse_term(&mut dec_cursor, &mut arena, &mut depth)
     }
 }

@@ -72,12 +72,13 @@ impl<'a> Cursor<'a> {
 
     #[inline(always)]
     pub(crate) fn read_u8(&mut self) -> Result<u8, EtfError> {
-        let (&b, rest) = self
-            .data
-            .split_first()
-            .ok_or_else(|| self.eof_or_incomplete(1))?;
-        self.data = rest;
-        Ok(b)
+        match self.data.split_first() {
+            Some((&b, rest)) => {
+                self.data = rest;
+                Ok(b)
+            }
+            None => Err(self.eof_or_incomplete(1)),
+        }
     }
 
     #[inline(always)]
