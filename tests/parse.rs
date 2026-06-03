@@ -56,14 +56,14 @@ fn test_legacy_float() {
 #[test]
 fn test_small_big() {
     with_parse(b"\x83\x6e\x02\x00\x00\x01", |term| {
-        assert!(matches!(term, Term::SmallBigInt { sign: 0, digits } if digits == &[0, 1]));
+        assert!(matches!(term, Term::SmallBigInt { sign: 0, digits } if digits == [0, 1]));
     });
 }
 
 #[test]
 fn test_large_big() {
-    with_parse(&vec![131, 111, 0, 0, 0, 1, 0, 42], |term| {
-        assert!(matches!(term, Term::LargeBigInt { sign: 0, digits } if digits == &[42]));
+    with_parse(&[131, 111, 0, 0, 0, 1, 0, 42], |term| {
+        assert!(matches!(term, Term::LargeBigInt { sign: 0, digits } if digits == [42]));
     });
 }
 
@@ -135,15 +135,12 @@ fn test_small_tuple() {
 
 #[test]
 fn test_large_tuple() {
-    with_parse(
-        &vec![131, 105, 0, 0, 0, 2, 97, 1, 97, 2],
-        |term| match term {
-            Term::Tuple(elems) => {
-                assert_eq!(elems.len(), 2);
-            }
-            _ => panic!("expected Tuple"),
-        },
-    );
+    with_parse(&[131, 105, 0, 0, 0, 2, 97, 1, 97, 2], |term| match term {
+        Term::Tuple(elems) => {
+            assert_eq!(elems.len(), 2);
+        }
+        _ => panic!("expected Tuple"),
+    });
 }
 
 // ── Lists ───────────────────────────────────────────────────────────────────
@@ -182,24 +179,21 @@ fn test_proper_list() {
 
 #[test]
 fn test_improper_list() {
-    with_parse(
-        &vec![131, 108, 0, 0, 0, 1, 97, 1, 97, 2],
-        |term| match term {
-            Term::ImproperList { elements, tail } => {
-                assert_eq!(elements.len(), 1);
-                assert!(matches!(elements[0], Term::Int(1)));
-                assert!(matches!(tail, Term::Int(2)));
-            }
-            _ => panic!("expected ImproperList"),
-        },
-    );
+    with_parse(&[131, 108, 0, 0, 0, 1, 97, 1, 97, 2], |term| match term {
+        Term::ImproperList { elements, tail } => {
+            assert_eq!(elements.len(), 1);
+            assert!(matches!(elements[0], Term::Int(1)));
+            assert!(matches!(tail, Term::Int(2)));
+        }
+        _ => panic!("expected ImproperList"),
+    });
 }
 
 // ── Maps ────────────────────────────────────────────────────────────────────
 
 #[test]
 fn test_empty_map() {
-    with_parse(&vec![131, 116, 0, 0, 0, 0], |term| match term {
+    with_parse(&[131, 116, 0, 0, 0, 0], |term| match term {
         Term::Map(pairs) => assert!(pairs.is_empty()),
         _ => panic!("expected Map"),
     });
@@ -224,7 +218,7 @@ fn test_map() {
 
 #[test]
 fn test_empty_binary() {
-    with_parse(&vec![131, 109, 0, 0, 0, 0], |term| {
+    with_parse(&[131, 109, 0, 0, 0, 0], |term| {
         assert!(matches!(term, Term::Binary(b) if b.is_empty()));
     });
 }
@@ -240,8 +234,8 @@ fn test_binary() {
 
 #[test]
 fn test_bit_binary() {
-    with_parse(&vec![131, 77, 0, 0, 0, 1, 3, 0b1010_0000], |term| {
-        assert!(matches!(term, Term::BitBinary { bits: 3, data } if data == &[0b1010_0000]));
+    with_parse(&[131, 77, 0, 0, 0, 1, 3, 0b1010_0000], |term| {
+        assert!(matches!(term, Term::BitBinary { bits: 3, data } if data == [0b1010_0000]));
     });
 }
 
@@ -448,7 +442,7 @@ fn test_zero_length_binary() {
 #[test]
 fn test_atom_max_length() {
     let mut buf = vec![131, 119, 255];
-    buf.extend(std::iter::repeat(b'a').take(255));
+    buf.extend(std::iter::repeat_n(b'a', 255));
     with_parse(&buf, |term| {
         assert!(matches!(term, Term::Atom(_)));
     });

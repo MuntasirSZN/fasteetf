@@ -72,9 +72,7 @@ fn deep_nested_64() {
     }
     input.push(97); // SMALL_INTEGER_EXT
     input.push(42);
-    for _ in 0..64 {
-        input.push(106); // NIL_EXT
-    }
+    input.extend(std::iter::repeat_n(106, 64)); // NIL_EXT
     parse_bytes(&input);
 }
 

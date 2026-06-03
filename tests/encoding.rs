@@ -264,7 +264,7 @@ fn test_roundtrip_int() {
 
 #[test]
 fn test_roundtrip_float() {
-    for &v in &[0.0f64, 1.0, -1.0, 3.14159, 1.0e200, -2.5e-100] {
+    for &v in &[0.0f64, 1.0, -1.0, std::f64::consts::PI, 1.0e200, -2.5e-100] {
         let encoded = encode_ok(&Term::Float(v));
         with_parse(&encoded, |parsed| {
             assert!(

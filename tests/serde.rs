@@ -24,9 +24,9 @@ fn test_serde_serialize_neg_int() {
 
 #[test]
 fn test_serde_serialize_float() {
-    let term = Term::Float(3.14);
+    let term = Term::Float(3.5);
     let json = serde_json::to_string(&term).unwrap();
-    assert_eq!(json, "3.14");
+    assert_eq!(json, "3.5");
 }
 
 #[test]
@@ -108,9 +108,9 @@ fn test_serde_deserialize_neg_int() {
 
 #[test]
 fn test_serde_deserialize_float() {
-    let json = "3.14";
+    let json = "3.141592653589793";
     let term: OwnedTerm = serde_json::from_str(json).unwrap();
-    assert!(matches!(term, OwnedTerm::Float(v) if (v - 3.14).abs() < 1e-10));
+    assert!(matches!(term, OwnedTerm::Float(v) if (v - std::f64::consts::PI).abs() < 1e-10));
 }
 
 #[test]
@@ -174,7 +174,7 @@ fn test_serde_roundtrip_json() {
     let original = Term::Tuple(&[
         Term::Int(1),
         Term::Atom(unsafe { AtomUtf8::from_bytes_unchecked(b"hello") }),
-        Term::List(&[Term::Float(3.14), Term::Int(42)]),
+        Term::List(&[Term::Float(std::f64::consts::PI), Term::Int(42)]),
     ]);
 
     // Term → JSON
