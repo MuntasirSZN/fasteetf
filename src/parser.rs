@@ -107,7 +107,10 @@ fn parse_term_inner<'a>(
 // ── Integers ───────────────────────────────────────────────────────────────
 
 #[inline]
-fn parse_small_big<'a>(cursor: &mut Cursor<'a>, arena: &mut Bump<'a>) -> Result<Term<'a>, EtfError> {
+fn parse_small_big<'a>(
+    cursor: &mut Cursor<'a>,
+    arena: &mut Bump<'a>,
+) -> Result<Term<'a>, EtfError> {
     let len = cursor.read_u8()? as usize;
     if len > arena.limits().max_binary_size {
         return Err(EtfError::BinaryTooLarge);
@@ -120,7 +123,10 @@ fn parse_small_big<'a>(cursor: &mut Cursor<'a>, arena: &mut Bump<'a>) -> Result<
 }
 
 #[inline]
-fn parse_large_big<'a>(cursor: &mut Cursor<'a>, arena: &mut Bump<'a>) -> Result<Term<'a>, EtfError> {
+fn parse_large_big<'a>(
+    cursor: &mut Cursor<'a>,
+    arena: &mut Bump<'a>,
+) -> Result<Term<'a>, EtfError> {
     let len = cursor.read_u32()? as usize;
     if len > arena.limits().max_binary_size {
         return Err(EtfError::BinaryTooLarge);
@@ -149,7 +155,10 @@ fn parse_legacy_float<'a>(cursor: &mut Cursor<'a>) -> Result<Term<'a>, EtfError>
 // ── Atoms (lazy UTF-8 — bytes stored, validated on demand) ─────────────────
 
 #[inline]
-fn parse_atom_utf8<'a>(cursor: &mut Cursor<'a>, arena: &mut Bump<'a>) -> Result<Term<'a>, EtfError> {
+fn parse_atom_utf8<'a>(
+    cursor: &mut Cursor<'a>,
+    arena: &mut Bump<'a>,
+) -> Result<Term<'a>, EtfError> {
     let len = cursor.read_u16()? as usize;
     if len > arena.limits().max_atom_len {
         return Err(EtfError::AtomTooLarge);
@@ -211,10 +220,7 @@ fn parse_tuple_elements<'a>(
 // ── Lists / Strings ────────────────────────────────────────────────────────
 
 #[inline]
-fn parse_string<'a>(
-    cursor: &mut Cursor<'a>,
-    arena: &mut Bump<'a>,
-) -> Result<Term<'a>, EtfError> {
+fn parse_string<'a>(cursor: &mut Cursor<'a>, arena: &mut Bump<'a>) -> Result<Term<'a>, EtfError> {
     let len = cursor.read_u16()? as usize;
     if len > arena.limits().max_string_len {
         return Err(EtfError::ListTooLarge);
@@ -228,10 +234,7 @@ fn parse_string<'a>(
 }
 
 #[inline]
-fn parse_list<'a>(
-    cursor: &mut Cursor<'a>,
-    arena: &mut Bump<'a>,
-) -> Result<Term<'a>, EtfError> {
+fn parse_list<'a>(cursor: &mut Cursor<'a>, arena: &mut Bump<'a>) -> Result<Term<'a>, EtfError> {
     let len = cursor.read_u32()? as usize;
     if len > arena.limits().max_list_len {
         return Err(EtfError::ListTooLarge);
@@ -258,10 +261,7 @@ fn parse_list<'a>(
 // ── Maps ───────────────────────────────────────────────────────────────────
 
 #[inline]
-fn parse_map<'a>(
-    cursor: &mut Cursor<'a>,
-    arena: &mut Bump<'a>,
-) -> Result<Term<'a>, EtfError> {
+fn parse_map<'a>(cursor: &mut Cursor<'a>, arena: &mut Bump<'a>) -> Result<Term<'a>, EtfError> {
     let len = cursor.read_u32()? as usize;
     if len > arena.limits().max_map_len {
         return Err(EtfError::MapTooLarge);
@@ -287,7 +287,10 @@ fn parse_binary<'a>(cursor: &mut Cursor<'a>, arena: &mut Bump<'a>) -> Result<Ter
 }
 
 #[inline]
-fn parse_bit_binary<'a>(cursor: &mut Cursor<'a>, arena: &mut Bump<'a>) -> Result<Term<'a>, EtfError> {
+fn parse_bit_binary<'a>(
+    cursor: &mut Cursor<'a>,
+    arena: &mut Bump<'a>,
+) -> Result<Term<'a>, EtfError> {
     let len = cursor.read_u32()? as usize;
     if len > arena.limits().max_bit_binary_size {
         return Err(EtfError::BinaryTooLarge);
@@ -314,10 +317,7 @@ fn parse_pid_legacy<'a>(
 }
 
 #[inline]
-fn parse_pid_new<'a>(
-    cursor: &mut Cursor<'a>,
-    arena: &mut Bump<'a>,
-) -> Result<Term<'a>, EtfError> {
+fn parse_pid_new<'a>(cursor: &mut Cursor<'a>, arena: &mut Bump<'a>) -> Result<Term<'a>, EtfError> {
     let start = cursor.consumed();
     let _ = parse_term(cursor, arena)?;
     let _data = cursor.take(12)?;
@@ -343,10 +343,7 @@ fn parse_port_legacy<'a>(
 }
 
 #[inline]
-fn parse_port_new<'a>(
-    cursor: &mut Cursor<'a>,
-    arena: &mut Bump<'a>,
-) -> Result<Term<'a>, EtfError> {
+fn parse_port_new<'a>(cursor: &mut Cursor<'a>, arena: &mut Bump<'a>) -> Result<Term<'a>, EtfError> {
     let start = cursor.consumed();
     let _ = parse_term(cursor, arena)?;
     let _data = cursor.take(8)?;
@@ -358,10 +355,7 @@ fn parse_port_new<'a>(
 }
 
 #[inline]
-fn parse_port_v4<'a>(
-    cursor: &mut Cursor<'a>,
-    arena: &mut Bump<'a>,
-) -> Result<Term<'a>, EtfError> {
+fn parse_port_v4<'a>(cursor: &mut Cursor<'a>, arena: &mut Bump<'a>) -> Result<Term<'a>, EtfError> {
     let start = cursor.consumed();
     let _ = parse_term(cursor, arena)?;
     let _data = cursor.take(12)?;
@@ -430,10 +424,7 @@ fn parse_new_fun<'a>(cursor: &mut Cursor<'a>, arena: &mut Bump<'a>) -> Result<Te
 }
 
 #[inline]
-fn parse_export<'a>(
-    cursor: &mut Cursor<'a>,
-    arena: &mut Bump<'a>,
-) -> Result<Term<'a>, EtfError> {
+fn parse_export<'a>(cursor: &mut Cursor<'a>, arena: &mut Bump<'a>) -> Result<Term<'a>, EtfError> {
     let start = cursor.consumed();
     let _module = parse_term(cursor, arena)?;
     let _function = parse_term(cursor, arena)?;
@@ -448,10 +439,7 @@ fn parse_export<'a>(
 // ── Records ────────────────────────────────────────────────────────────────
 
 #[inline]
-fn parse_record<'a>(
-    cursor: &mut Cursor<'a>,
-    arena: &mut Bump<'a>,
-) -> Result<Term<'a>, EtfError> {
+fn parse_record<'a>(cursor: &mut Cursor<'a>, arena: &mut Bump<'a>) -> Result<Term<'a>, EtfError> {
     let start = cursor.consumed();
     let num_fields = cursor.read_u32()? as usize;
     if num_fields > arena.limits().max_map_len {

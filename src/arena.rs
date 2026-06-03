@@ -1,8 +1,8 @@
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 
-use crate::error::EtfError;
 use crate::Limits;
+use crate::error::EtfError;
 
 /// A simple bump allocator used to build the AST from a pre-allocated scratch buffer.
 ///
@@ -47,7 +47,11 @@ impl<'a> Bump<'a> {
         // Round ptr up to max_align_t.
         let align = core::mem::align_of::<u128>();
         let misalignment = (raw_start as usize) & (align - 1);
-        let adj = if misalignment == 0 { 0 } else { align - misalignment };
+        let adj = if misalignment == 0 {
+            0
+        } else {
+            align - misalignment
+        };
         let ptr = unsafe { raw_start.add(adj) };
 
         Bump {
@@ -87,9 +91,7 @@ impl<'a> Bump<'a> {
 
         self.ptr = end;
 
-        unsafe {
-            Ok(core::slice::from_raw_parts_mut(ptr as *mut T, len))
-        }
+        unsafe { Ok(core::slice::from_raw_parts_mut(ptr as *mut T, len)) }
     }
 
     /// Convenience method: allocate a single `Term` slot.

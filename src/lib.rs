@@ -141,14 +141,20 @@ pub fn parse_etf<'a>(options: ParseOptions<'a>) -> Result<Term<'a>, EtfError> {
             }
 
             let mut dec_cursor = cursor::Cursor::new(target_buf);
-            let mut arena =
-                arena::Bump::new(options.ast_arena, options.limits.max_depth + 1, &options.limits);
+            let mut arena = arena::Bump::new(
+                options.ast_arena,
+                options.limits.max_depth + 1,
+                &options.limits,
+            );
 
             parser::parse_term(&mut dec_cursor, &mut arena)
         }
     } else {
-        let mut arena =
-            arena::Bump::new(options.ast_arena, options.limits.max_depth + 1, &options.limits);
+        let mut arena = arena::Bump::new(
+            options.ast_arena,
+            options.limits.max_depth + 1,
+            &options.limits,
+        );
 
         parser::parse_term(&mut cursor, &mut arena)
     }
@@ -234,14 +240,20 @@ pub fn parse_etf_streaming<'a>(options: ParseOptions<'a>) -> Result<Term<'a>, Et
             }
 
             let mut dec_cursor = cursor::Cursor::new(target_buf);
-            let mut arena =
-                arena::Bump::new(options.ast_arena, options.limits.max_depth + 1, &options.limits);
+            let mut arena = arena::Bump::new(
+                options.ast_arena,
+                options.limits.max_depth + 1,
+                &options.limits,
+            );
 
             parser::parse_term(&mut dec_cursor, &mut arena)
         }
     } else {
-        let mut arena =
-            arena::Bump::new(options.ast_arena, options.limits.max_depth + 1, &options.limits);
+        let mut arena = arena::Bump::new(
+            options.ast_arena,
+            options.limits.max_depth + 1,
+            &options.limits,
+        );
 
         parser::parse_term(&mut cursor, &mut arena)
     }
