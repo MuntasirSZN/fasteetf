@@ -162,11 +162,6 @@ mod miniz_oxide_impl {
         use ::miniz_oxide::inflate::stream::InflateState;
         use ::miniz_oxide::{DataFormat, MZFlush, MZStatus};
 
-        // `InflateState::new_boxed` is only available with miniz_oxide's
-        // `with-alloc` feature (it allocates the state on the heap).  Use
-        // the stack-allocated `InflateState::new` so this backend works
-        // in `no_alloc` builds too.  The struct is `Clone`, but we don't
-        // need that here — `&mut` access to a local is enough.
         let mut state = InflateState::new(DataFormat::Zlib);
 
         // Total bytes written so far into `target`.  The streaming API
