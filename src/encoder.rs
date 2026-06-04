@@ -127,57 +127,111 @@ pub fn encode_to_vec(term: &Term<'_>) -> Result<Vec<u8>, EtfError> {
     Ok(enc.into_vec())
 }
 
+/// Encode a [`Term`] into a COMPRESSED-wrapped ETF byte stream.
+///
+/// The wire format written to `output` is:
+///
+/// ```text
+/// 131 COMPRESSED UncompressedSize ZlibData
+/// ```
+///
+/// where `UncompressedSize` is the 4-byte big-endian byte length of
+/// the encoded term (the contents of `intermediate` *after* the leading
+/// magic byte — i.e. everything `encode_to_buf` would have written
+/// past its first byte), and `ZlibData` is the result of zlib-compressing
+/// that same payload.
+///
+/// # Parameters
+///
+/// * `term` — the term to encode.
+/// * `intermediate` — a scratch buffer to hold the bare ETF bytes
+///   (no COMPRESSED wrapper).  The magic byte `131` is written to
+///   `intermediate[0]`; the rest of the encoded term follows.  Size
+///   it generously — start with 4–8 KiB for typical messages.
+/// * `output` — the destination buffer for the COMPRESSED byte stream.
+///   Must hold at least `6 + compressed_bound(intermediate_used_len)`
+///   bytes.  The 6 bytes are: `131`, `COMPRESSED`, and the 4-byte
+///   uncompressed-size prefix.
+/// * `compress` — an optional runtime zlib backend.  When `Some`, the
+///   supplied function is used; when `None`, the compile-time backend
+///   (selected via the `zlib-*` feature) is used.  Pass
+///   `<MyBackend as ZlibBackend>::compress`-style function pointers to
+///   plug in a custom implementation.
+///
+/// # Returns
+///
+/// The number of bytes written to `output`.
+///
+/// # Errors
+///
+/// * [`EtfError::UnexpectedEof`] if `intermediate` is too small to
+///   hold the encoded term, or if `output` is too small to hold the
+///   COMPRESSED wrapper.
+/// * [`EtfError::CompressionFailed`] if the zlib backend fails (most
+///   commonly: the chosen backend has no allocator configured, e.g.
+///   a pure-Rust backend without our `alloc` feature).
+///
+/// Requires the `compression` feature.  Unlike [`encode_to_vec`], this
+/// function does not require `alloc`: both buffers are caller-supplied
+/// slices.
+#[cfg(feature = "compression")]
+pub fn encode_to_compressed(
+    term: &Term<'_>,
+    intermediate: &mut [u8],
+    output: &mut [u8],
+    compress: Option<crate::zlib::ZlibCompressFn>,
+) -> Result<usize, EtfError> {
+    // Step 1: encode the term to `intermediate`.  This writes the magic
+    // byte (131) at `intermediate[0]` and the term body afterwards.  We
+    // skip the magic byte before compression — the COMPRESSED wrapper
+    // re-emits it as part of the outer stream.
+    let n = encode_to_buf(term, intermediate)?;
+    let body = &intermediate[1..n];
+
+    // Step 2: write the COMPRESSED header into `output`.  Layout:
+    //   output[0] = 131             (outer magic)
+    //   output[1] = COMPRESSED (80) (outer tag)
+    //   output[2..6] = body.len()   (uncompressed size, BE u32)
+    //   output[6..6+c] = zlib(body) (compressed body)
+    if output.len() < 6 {
+        return Err(EtfError::UnexpectedEof);
+    }
+    output[0] = ETF_MAGIC;
+    output[1] = COMPRESSED;
+    output[2..6].copy_from_slice(&(body.len() as u32).to_be_bytes());
+
+    // Step 3: compress `body` into the tail of `output`.  The dispatch
+    // in `zlib::compress` picks a runtime override, otherwise the
+    // compile-time backend.
+    let compressed_len = crate::zlib::compress(&mut output[6..], body, compress)?;
+
+    Ok(6 + compressed_len)
+}
+
 // ── Theme: encode_term dispatch ────────────────────────────────────────────
 
 /// Recursively encode a single ETF term into the encoder.
 fn encode_term(enc: &mut Encoder, term: &Term) -> Result<(), EtfError> {
     match term {
-        // ===================================================================
-        // Integers
-        // ===================================================================
         Term::Int(v) => encode_int(enc, *v),
 
-        // ===================================================================
-        // Bignums
-        // ===================================================================
         Term::SmallBigInt { sign, digits } => encode_small_big(enc, *sign, digits),
         Term::LargeBigInt { sign, digits } => encode_large_big(enc, *sign, digits),
 
-        // ===================================================================
-        // Floats
-        // ===================================================================
         Term::Float(v) => encode_float(enc, *v),
 
-        // ===================================================================
-        // Atoms
-        // ===================================================================
         Term::Atom(a) => encode_atom(enc, a.as_bytes()),
 
-        // ===================================================================
-        // Tuples
-        // ===================================================================
         Term::Tuple(elements) => encode_tuple(enc, elements),
 
-        // ===================================================================
-        // Lists / Nil / Strings
-        // ===================================================================
         Term::List(elements) => encode_list(enc, elements),
         Term::ImproperList { elements, tail } => encode_improper_list(enc, elements, tail),
 
-        // ===================================================================
-        // Maps
-        // ===================================================================
         Term::Map(pairs) => encode_map(enc, pairs),
 
-        // ===================================================================
-        // Binaries
-        // ===================================================================
         Term::Binary(data) => encode_binary(enc, data),
         Term::BitBinary { bits, data } => encode_bit_binary(enc, *bits, data),
 
-        // ===================================================================
-        // Opaque wrappers
-        // ===================================================================
         Term::Pid(p) => encode_opaque(enc, p.0, p.1),
         Term::Port(p) => encode_opaque(enc, p.0, p.1),
         Term::Ref(r) => encode_opaque(enc, r.0, r.1),

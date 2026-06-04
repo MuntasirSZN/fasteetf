@@ -88,6 +88,18 @@ pub enum EtfError {
     #[error("zlib decompression failed")]
     DecompressionFailed,
 
+    /// Zlib compression (e.g. inside [`encode_to_compressed`]) failed.
+    ///
+    /// The most common cause is an output buffer that is too small to
+    /// hold the compressed payload — `compressBound` is a good upper
+    /// bound to size it.  Backend-level errors (e.g. an `alloc`-less
+    /// pure-Rust backend with no allocator configured) also surface
+    /// here.
+    ///
+    /// [`encode_to_compressed`]: crate::encode_to_compressed
+    #[error("zlib compression failed")]
+    CompressionFailed,
+
     /// The bump arena has been exhausted.  Increase [`ast_arena`] size.
     ///
     /// [`ast_arena`]: crate::ParseOptions::ast_arena

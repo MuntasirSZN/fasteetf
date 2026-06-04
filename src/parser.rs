@@ -93,19 +93,11 @@ fn parse_term_inner<'a>(
 
         RECORD_EXT => parse_record(cursor, arena, depth),
 
-        LOCAL_EXT | COMPRESSED | ATOM_CACHE_REF | DIST_HEADER | DIST_HEADER_FRAG_START => {
-            Err(EtfError::UnsupportedTag(tag))
-        }
+        LOCAL_EXT | COMPRESSED | ATOM_CACHE_REF => Err(EtfError::UnsupportedTag(tag)),
 
         _ => Err(EtfError::UnsupportedTag(tag)),
     }
 }
-
-// ── Small specialized parse functions ───────────────────────────────────────
-//
-// Every function now takes (cursor, arena, depth) — the depth is the
-// recursion budget passed by `parse_term`.  Limits continue to live on the
-// arena because the inner functions only need read access.
 
 // ── Integers ───────────────────────────────────────────────────────────────
 

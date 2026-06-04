@@ -9,8 +9,8 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::marker::PhantomData;
 
-use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
-use serde::ser::{
+use serde_core::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
+use serde_core::ser::{
     Serialize, SerializeMap, SerializeSeq, SerializeStruct, SerializeTuple, Serializer,
 };
 

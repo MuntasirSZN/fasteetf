@@ -17,6 +17,7 @@ pub fn with_parse<R>(input: &[u8], f: impl FnOnce(Term<'_>) -> R) -> R {
         decompressed_buffer: None,
         ast_arena: &mut arena,
         limits: Limits::default(),
+        zlib_backend: None,
     })
     .unwrap();
     f(term)
@@ -30,6 +31,7 @@ pub fn parse_err(input: &[u8]) -> EtfError {
         decompressed_buffer: None,
         ast_arena: &mut arena,
         limits: Limits::default(),
+        zlib_backend: None,
     })
     .unwrap_err()
 }

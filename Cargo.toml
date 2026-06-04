@@ -11,27 +11,166 @@ description = "A extremely fast, rust-based, no-std EETF (Erlang External Term F
 homepage = "https://github.com/MuntasirSZN/fasteetf"
 include = ["/src", "LICENSE", "/examples", "/benches"]
 
+# ── Feature design ──────────────────────────────────────────────────────────
+#
+# The crate's *core* — parsing, encoding, and the visitor API — is always
+# compiled in.  On top of that, optional features add the heavier pieces
+# (compression, serde, owned types) only when you ask for them.
+#
+# # Default features
+#
+# ```toml
+# fasteetf = "0.1"   # pulls in std, alloc, compression, zlib-rs
+# ```
+#
+# Defaults match the Rust ecosystem convention (`std` is on) and the
+# EETF spec's full feature set (zlib-compressed terms are first-class
+# ETF citizens — see the `COMPRESSED` tag in the spec).
+#
+# # Feature matrix
+#
+# | Feature            | What it adds                                                | Pulls in               |
+# |--------------------|-------------------------------------------------------------|------------------------|
+# | `std`              | `std::error::Error` impls on errors.                        | `thiserror/std`, alloc |
+# | `alloc`            | Owned types (`OwnedTerm`, …) and `encode_to_vec`.           | —                      |
+# | `compression`      | COMPRESSED-tag decode + `encode_to_compressed` (writer).     | —                      |
+# | `serde`            | `Serialize`/`Deserialize` for `Term` and `OwnedTerm`.        | `serde_core` + alloc   |
+# | `zlib-rs`          | Built-in zlib backend (pure-Rust, `zlib-rs`).               | `zlib-rs`              |
+# | `miniz_oxide`      | Built-in zlib backend (pure-Rust, `miniz_oxide`).           | `miniz_oxide`          |
+# | `zlib`             | System zlib via `libz-sys` (no default features).           | `libz-sys`             |
+# | `zlib-default`     | System zlib via `libz-sys` with its default features.       | `libz-sys`             |
+# | `zlib-ng-compat`   | zlib-ng in compat mode via `libz-sys`.                      | `libz-sys`             |
+# | `zlib-ng`          | Native zlib-ng via `libz-ng-sys`.                           | `libz-ng-sys`          |
+# | `cloudflare-zlib`  | Cloudflare's zlib via `cloudflare-zlib-sys`.                | `cloudflare-zlib-sys`  |
+#
+# # Propagation
+#
+# `alloc` and `std` propagate to optional dependencies that need them,
+# using Cargo's `?/` syntax: "if this dep is enabled, also enable its
+# `alloc`/`std` feature".  For example, `serde_core?/alloc` means "if
+# `serde_core` is pulled in (by enabling `serde`), also enable its
+# `alloc` feature — and only if our `alloc` is on".  This means
+#
+# * enabling `alloc` does NOT pull in any extra crate,
+# * enabling `std` does NOT pull in any extra crate,
+# * the alloc/std bits of an optional dep are turned on exactly when
+#   our `alloc`/`std` is on, with no manual user effort.
+#
+# # Common recipes
+#
+# Bare-metal / kernel / WASM, no compression, no alloc:
+# ```toml
+# fasteetf = { version = "0.1", default-features = false }
+# ```
+#
+# Embedded with std but no compression:
+# ```toml
+# fasteetf = { version = "0.1", default-features = false, features = ["std"] }
+# ```
+#
+# Server-side with a different zlib backend:
+# ```toml
+# fasteetf = { version = "0.1", default-features = false, features = ["std", "compression", "miniz_oxide", "serde"] }
+# ```
 [features]
-default = ["std", "compression"]
-alloc = []
-std = ["alloc", "thiserror/std"]
-compression = ["zlib-rs", "alloc"]
-serde = ["dep:serde", "alloc"]
+default = ["std", "compression", "zlib-rs"]
+
+# `alloc` enables the owned term types (`OwnedTerm`, `OwnedPid`, …) and
+# the `encode_to_vec` helper.  The zero-copy parser, encoder, and visitor
+# API all work without it.  Propagates the `alloc` / `with-alloc` /
+# `rust-allocator` feature to optional dependencies that have one.
+alloc = [
+  "serde_core?/alloc",
+  "miniz_oxide?/with-alloc",
+  "zlib-rs?/rust-allocator",
+]
+
+# `std` enables `std::error::Error` impls on `EtfError` / `Needed` via
+# `thiserror`'s `std` feature.  It implies `alloc` and propagates to
+# optional deps that have a `std` feature.
+std = [
+  "alloc",
+  "thiserror/std",
+  "serde_core?/std",
+  "zlib-rs?/std",
+  "miniz_oxide?/std",
+]
+
+# `compression` turns on the COMPRESSED-tag (80) code path.  Decoding
+# uses a caller-supplied slice and a zlib backend (compile-time via
+# `zlib-*` feature, or runtime via `ParseOptions::zlib_backend`).
+# Encoding produces a COMPRESSED byte stream via `encode_to_compressed`.
+# Neither path needs `alloc`; both are pure functions over slices and
+# function pointers.
+compression = []
+
+# `serde` adds `Serialize` / `Deserialize` impls for the borrowed `Term`
+# and the owned `OwnedTerm`.  It pulls in `serde_core` and propagates
+# the `alloc` flag (since `OwnedTerm` is the primary deserialisation
+# target — it owns its data).
+serde = ["dep:serde_core", "alloc"]
+
+# ── Zlib backend features (additive, last-one-wins) ────────────────────
+# These are siblings of `compression`.  Enable one or more to add a
+# built-in decompression / compression backend; if more than one is
+# enabled, the *last* one in source order (highest priority) is used
+# at runtime.  If none are enabled, supply a backend at runtime via
+# `ParseOptions::zlib_backend` / `encode_to_compressed`'s argument
+# (implement the [`ZlibBackend`](crate::ZlibBackend) trait).  See
+# `src/zlib.rs` for the dispatch logic.  The names mirror `flate2`.
+#
+# The C-based backends (`zlib`, `zlib-default`, `zlib-ng-compat`,
+# `zlib-ng`, `cloudflare-zlib`) use `libc` via FFI and do not require
+# any of this crate's features.  The pure-Rust backends (`zlib-rs`,
+# `miniz_oxide`) honour our `alloc` flag: when `alloc` is on they get
+# their own runtime-allocator feature enabled so they can use the
+# global allocator for internal scratch space.
+zlib-rs = ["dep:zlib-rs"]
+miniz_oxide = ["dep:miniz_oxide"]
+# System zlib (no default features, no `stock` CFLAGS, no pkg-config).
+zlib = ["dep:libz-sys"]
+# System zlib via libz-sys with its default features enabled
+# (pkg-config discovery, optimised build).
+zlib-default = ["dep:libz-sys", "libz-sys?/default"]
+# zlib-ng running in zlib-compat mode through libz-sys.
+zlib-ng-compat = ["dep:libz-sys", "libz-sys?/zlib-ng"]
+# Native zlib-ng (no compat shim).
+zlib-ng = ["dep:libz-ng-sys"]
+cloudflare-zlib = ["dep:cloudflare-zlib-sys"]
 
 [dependencies]
-serde = { version = "1", default-features = false, features = ["alloc"], optional = true }
+serde_core = { version = "1", default-features = false, optional = true }
 thiserror = { version = "2", default-features = false }
+
+# Built-in zlib backends.  Selecting more than one is allowed; see
+# `src/zlib.rs` for the dispatch priority.  None of these backends
+# require this crate's `alloc` feature on their own — they have
+# their own `alloc`-like feature (`rust-allocator`, `with-alloc`)
+# which we propagate via the `alloc` feature above.
 zlib-rs = { version = "0.6.3", default-features = false, features = [
   "vpclmulqdq",
   "avx512",
-  "rust-allocator",
 ], optional = true }
+miniz_oxide = { version = "0.9.1", default-features = false, optional = true, features = [
+  "simd",
+] }
+libz-sys = { version = "1.1.20", default-features = false, features = ["libc"], optional = true }
+libz-ng-sys = { version = "1.1.16", default-features = false, optional = true }
+cloudflare-zlib-sys = { version = "0.3.6", optional = true }
 
 [dev-dependencies]
 divan = "0.1"
 proptest = "1"
 serde_json = "1"
+# Used by integration tests to construct zlib-compressed ETF fixtures
+# and to provide an out-of-the-box custom ZlibBackend implementation.
+zlib-rs = { version = "0.6.3", default-features = false, features = [
+  "vpclmulqdq",
+  "avx512",
+  "rust-allocator",
+] }
 
 [[bench]]
 name = "parse"
 harness = false
+required-features = ["std"]

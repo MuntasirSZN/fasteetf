@@ -302,11 +302,3 @@ pub const ATOM_CACHE_REF: u8 = 82;
 /// Not decodable by a generic parser — the bytes that follow are in a
 /// private format defined by the encoder.
 pub const LOCAL_EXT: u8 = 121;
-
-// ── Distribution-header tags (listed for reference, never parsed as terms) ──
-
-/// Distribution header (non-fragmented): `131 68 …`.
-pub const DIST_HEADER: u8 = 68;
-
-/// Distribution header (fragmented start): `131 69 …`.
-pub const DIST_HEADER_FRAG_START: u8 = 69;

@@ -18,12 +18,13 @@ fuzz_target!(|data: &[u8]| {
     // Stack-allocated arena large enough for most well-formed terms.
     let mut arena_buf = [core::mem::MaybeUninit::<u8>::uninit(); 65536];
 
-    // ── Step 1: Parse ─────────────────────────────────────────────────
+    // ── Step 1: Parse ─────────────────────────────────
     let opts = fasteetf::ParseOptions {
         input: data,
         decompressed_buffer: None,
         ast_arena: &mut arena_buf,
         limits: fasteetf::Limits::default(),
+        zlib_backend: None,
     };
 
     let term = match fasteetf::parse_etf(opts) {
@@ -31,19 +32,20 @@ fuzz_target!(|data: &[u8]| {
         Err(_) => return, // malformed input — not a round-trip failure
     };
 
-    // ── Step 2: Encode ────────────────────────────────────────────────
+    // ── Step 2: Encode ─────────────────────────────────
     let encoded = match fasteetf::encode_to_vec(&term) {
         Ok(bytes) => bytes,
         Err(_) => panic!("encode_to_vec failed on a valid term"),
     };
 
-    // ── Step 3: Re-parse ──────────────────────────────────────────────
+    // ── Step 3: Re-parse ──────────────────────────────────
     let mut arena_buf2 = [core::mem::MaybeUninit::<u8>::uninit(); 65536];
     let opts2 = fasteetf::ParseOptions {
         input: &encoded,
         decompressed_buffer: None,
         ast_arena: &mut arena_buf2,
         limits: fasteetf::Limits::default(),
+        zlib_backend: None,
     };
 
     let term2 = match fasteetf::parse_etf(opts2) {

@@ -15,8 +15,6 @@
 //   cargo bench
 // ─────────────────────────────────────────────────────────────────────────────
 
-#![cfg(feature = "std")]
-
 use core::mem::MaybeUninit;
 use fasteetf::{Limits, ParseOptions, parse_etf};
 
@@ -37,6 +35,7 @@ fn parse_bytes(input: &[u8]) {
         decompressed_buffer: None,
         ast_arena: &mut arena_buf,
         limits: Limits::default(),
+        zlib_backend: None,
     })
     .unwrap();
 }

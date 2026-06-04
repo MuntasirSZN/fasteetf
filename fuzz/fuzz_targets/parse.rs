@@ -32,6 +32,7 @@ fuzz_target!(|data: &[u8]| {
         decompressed_buffer: None,
         ast_arena: &mut arena_buf,
         limits: fasteetf::Limits::default(),
+        zlib_backend: None,
     };
 
     // The parser MUST NEVER panic on any input.

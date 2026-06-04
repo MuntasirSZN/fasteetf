@@ -21,17 +21,23 @@ mod serde_impl;
 mod tags;
 mod types;
 mod visitor;
+mod zlib;
 
 // ── Public API surface ──────────────────────────────────────────────────────
 
 pub use encoder::encode_to_buf;
 
+#[cfg(feature = "compression")]
+pub use encoder::encode_to_compressed;
 #[cfg(feature = "alloc")]
 pub use encoder::encode_to_vec;
 pub use error::{EtfError, Needed};
 pub use limits::*;
 pub use types::{AtomUtf8, Function, Pid, Port, Record, Reference, Term};
 pub use visitor::{Visitor, parse_etf_with_visitor, parse_etf_with_visitor_streaming};
+#[cfg(feature = "compression")]
+pub use zlib::ZlibCompressFn;
+pub use zlib::{ZlibBackend, ZlibDecompressFn};
 
 #[cfg(feature = "alloc")]
 pub use types::owned::{
@@ -65,6 +71,18 @@ pub struct ParseOptions<'a> {
     /// Use [`Limits::default()`] for the built-in defaults, or construct a
     /// custom `Limits` with overridden fields for tighter/looser bounds.
     pub limits: Limits,
+    /// Optional runtime zlib backend.  When `Some`, the supplied function
+    /// is used to decompress any [`COMPRESSED`](tags::COMPRESSED) term
+    /// regardless of the compile-time `zlib-*` feature.  When `None`, the
+    /// compile-time backend (selected via the `zlib-rs`, `miniz_oxide`,
+    /// `zlib`, `zlib-default`, `zlib-ng-compat`, `zlib-ng`, or
+    /// `cloudflare-zlib` feature) is used.  If no backend is compiled in
+    /// and this is `None`, encountering a compressed term yields
+    /// [`EtfError::UnsupportedTag`].
+    ///
+    /// Pass `<MyBackend as ZlibBackend>::decompress` to use a custom
+    /// implementation of the [`ZlibBackend`] trait.
+    pub zlib_backend: Option<ZlibDecompressFn>,
 }
 
 /// Parse an ETF-encoded term from a complete input buffer.
@@ -99,7 +117,7 @@ pub struct ParseOptions<'a> {
 /// Spec: https://www.erlang.org/doc/apps/erts/erl_ext_dist
 pub fn parse_etf<'a>(options: ParseOptions<'a>) -> Result<Term<'a>, EtfError> {
     #[cfg(not(feature = "compression"))]
-    let _ = options.decompressed_buffer; // suppress unused warning
+    let _ = (options.decompressed_buffer, options.zlib_backend);
 
     let mut cursor = cursor::Cursor::new(options.input);
 
@@ -123,7 +141,7 @@ pub fn parse_etf<'a>(options: ParseOptions<'a>) -> Result<Term<'a>, EtfError> {
     #[cfg(not(feature = "compression"))]
     {
         let _ = cursor; // suppress unused
-        return Err(EtfError::UnsupportedTag(tags::COMPRESSED));
+        Err(EtfError::UnsupportedTag(tags::COMPRESSED))
     }
 
     #[cfg(feature = "compression")]
@@ -141,11 +159,9 @@ pub fn parse_etf<'a>(options: ParseOptions<'a>) -> Result<Term<'a>, EtfError> {
 
         let target_buf = &mut decomp_buf[..uncompressed_size];
 
-        // One-shot zlib decompression via zlib-rs.
-        let (_, rc) = zlib_rs::decompress_slice(target_buf, cursor.data, Default::default());
-        if rc != zlib_rs::ReturnCode::Ok {
-            return Err(EtfError::DecompressionFailed);
-        }
+        // Backend selection: runtime override wins; otherwise the
+        // compile-time `zlib-*` feature is used; otherwise `UnsupportedTag`.
+        zlib::decompress(target_buf, cursor.data, options.zlib_backend)?;
 
         let mut dec_cursor = cursor::Cursor::new(target_buf);
         let mut arena = arena::Bump::new(options.ast_arena, &options.limits);
@@ -195,7 +211,7 @@ pub fn parse_etf<'a>(options: ParseOptions<'a>) -> Result<Term<'a>, EtfError> {
 /// from a mere "need more data" signal.
 pub fn parse_etf_streaming<'a>(options: ParseOptions<'a>) -> Result<Term<'a>, EtfError> {
     #[cfg(not(feature = "compression"))]
-    let _ = options.decompressed_buffer;
+    let _ = (options.decompressed_buffer, options.zlib_backend);
 
     let mut cursor = cursor::Cursor::new_streaming(options.input);
 
@@ -216,7 +232,7 @@ pub fn parse_etf_streaming<'a>(options: ParseOptions<'a>) -> Result<Term<'a>, Et
     #[cfg(not(feature = "compression"))]
     {
         let _ = cursor;
-        return Err(EtfError::UnsupportedTag(tags::COMPRESSED));
+        Err(EtfError::UnsupportedTag(tags::COMPRESSED))
     }
 
     #[cfg(feature = "compression")]
@@ -234,10 +250,7 @@ pub fn parse_etf_streaming<'a>(options: ParseOptions<'a>) -> Result<Term<'a>, Et
 
         let target_buf = &mut decomp_buf[..uncompressed_size];
 
-        let (_, rc) = zlib_rs::decompress_slice(target_buf, cursor.data, Default::default());
-        if rc != zlib_rs::ReturnCode::Ok {
-            return Err(EtfError::DecompressionFailed);
-        }
+        zlib::decompress(target_buf, cursor.data, options.zlib_backend)?;
 
         let mut dec_cursor = cursor::Cursor::new(target_buf);
         let mut arena = arena::Bump::new(options.ast_arena, &options.limits);

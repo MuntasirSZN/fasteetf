@@ -39,6 +39,8 @@ use crate::Limits;
 use crate::cursor::Cursor;
 use crate::error::EtfError;
 use crate::tags::*;
+#[cfg(feature = "compression")]
+use crate::zlib;
 
 /// A visitor that receives events as an ETF term tree is decoded.
 ///
@@ -235,6 +237,7 @@ pub trait Visitor {
 pub fn parse_etf_with_visitor<'a, V: Visitor>(
     input: &'a [u8],
     #[allow(unused_variables)] decompressed_buffer: Option<&'a mut [u8]>,
+    #[allow(unused_variables)] zlib_backend: Option<crate::ZlibDecompressFn>,
     visitor: &mut V,
     limits: &Limits,
 ) -> Result<(), V::Error> {
@@ -258,18 +261,18 @@ pub fn parse_etf_with_visitor<'a, V: Visitor>(
         }
 
         let target_buf = &mut decomp_buf[..uncompressed_size];
-        let (_, rc) = zlib_rs::decompress_slice(target_buf, cursor.data, Default::default());
-        if rc != zlib_rs::ReturnCode::Ok {
-            return Err(EtfError::DecompressionFailed.into());
-        }
+        zlib::decompress(target_buf, cursor.data, zlib_backend)?;
 
         let mut dec_cursor = Cursor::new(target_buf);
         return visit_term(&mut dec_cursor, visitor, 0, limits);
     }
 
     #[cfg(not(feature = "compression"))]
-    if cursor.data.first() == Some(&COMPRESSED) {
-        return Err(EtfError::UnsupportedTag(COMPRESSED).into());
+    {
+        let _ = zlib_backend;
+        if cursor.data.first() == Some(&COMPRESSED) {
+            return Err(EtfError::UnsupportedTag(COMPRESSED).into());
+        }
     }
 
     visit_term(&mut cursor, visitor, 0, limits)
@@ -290,6 +293,7 @@ pub fn parse_etf_with_visitor<'a, V: Visitor>(
 pub fn parse_etf_with_visitor_streaming<'a, V: Visitor>(
     input: &'a [u8],
     #[allow(unused_variables)] decompressed_buffer: Option<&'a mut [u8]>,
+    #[allow(unused_variables)] zlib_backend: Option<crate::ZlibDecompressFn>,
     visitor: &mut V,
     limits: &Limits,
 ) -> Result<(), V::Error> {
@@ -313,18 +317,18 @@ pub fn parse_etf_with_visitor_streaming<'a, V: Visitor>(
         }
 
         let target_buf = &mut decomp_buf[..uncompressed_size];
-        let (_, rc) = zlib_rs::decompress_slice(target_buf, cursor.data, Default::default());
-        if rc != zlib_rs::ReturnCode::Ok {
-            return Err(EtfError::DecompressionFailed.into());
-        }
+        zlib::decompress(target_buf, cursor.data, zlib_backend)?;
 
         let mut dec_cursor = Cursor::new(target_buf);
         return visit_term(&mut dec_cursor, visitor, 0, limits);
     }
 
     #[cfg(not(feature = "compression"))]
-    if cursor.data.first() == Some(&COMPRESSED) {
-        return Err(EtfError::UnsupportedTag(COMPRESSED).into());
+    {
+        let _ = zlib_backend;
+        if cursor.data.first() == Some(&COMPRESSED) {
+            return Err(EtfError::UnsupportedTag(COMPRESSED).into());
+        }
     }
 
     visit_term(&mut cursor, visitor, 0, limits)
@@ -398,11 +402,6 @@ fn visit_term<'a, V: Visitor>(
         _ => Err(EtfError::UnsupportedTag(tag).into()),
     }
 }
-
-// ── Small specialized visit functions ───────────────────────────────────────
-//
-// Each function handles one tag or a tightly related group of tags for the
-// visitor path.  Kept small (3–15 lines) for independent fuzzing/auditing.
 
 // ── Integers ───────────────────────────────────────────────────────────────
 
