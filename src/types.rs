@@ -57,22 +57,39 @@ pub enum Term<'a> {
     Int(i32),
     /// An arbitrary-precision integer with 1-byte digit count
     /// (spec: `SMALL_BIG_EXT`).
-    SmallBigInt { sign: u8, digits: &'a [u8] },
+    SmallBigInt {
+        /// Sign byte: 0 = positive, 1 = negative.
+        sign: u8,
+        /// Big-endian digits (least significant byte first).
+        digits: &'a [u8],
+    },
     /// An arbitrary-precision integer with 4-byte digit count
     /// (spec: `LARGE_BIG_EXT`).
-    LargeBigInt { sign: u8, digits: &'a [u8] },
+    LargeBigInt {
+        /// Sign byte: 0 = positive, 1 = negative.
+        sign: u8,
+        /// Big-endian digits (least significant byte first).
+        digits: &'a [u8],
+    },
     /// An IEEE 754 double-precision float (spec: `NEW_FLOAT_EXT`, `FLOAT_EXT`).
     Float(f64),
     /// A binary blob (spec: `BINARY_EXT`).
     Binary(&'a [u8]),
     /// A bitstring whose total bit-length may not be a multiple of 8
     /// (spec: `BIT_BINARY_EXT`).
-    BitBinary { bits: u8, data: &'a [u8] },
+    BitBinary {
+        /// Number of significant bits in the last byte (1–8).
+        bits: u8,
+        /// Binary data padded to a whole number of bytes.
+        data: &'a [u8],
+    },
     /// A proper list (spec: `NIL_EXT` for empty, `LIST_EXT` with nil tail).
     List(&'a [Term<'a>]),
     /// An improper list (spec: `LIST_EXT` with non-nil tail).
     ImproperList {
+        /// Prefix elements before the tail.
         elements: &'a [Term<'a>],
+        /// Non-nil tail term.
         tail: &'a Term<'a>,
     },
     /// A tuple (spec: `SMALL_TUPLE_EXT`, `LARGE_TUPLE_EXT`).
@@ -230,6 +247,10 @@ pub struct Record<'a>(pub &'a [u8]);
 // terms pay no code-size or dependency penalty.
 
 #[cfg(feature = "alloc")]
+/// Owned, heap-allocated equivalents of [`Term`] variants.
+///
+/// These types own their data and can outlive the original input buffer.
+/// Conversion from the borrowed [`Term`] enum is provided via `From` impls.
 pub mod owned {
     use alloc::boxed::Box;
     use alloc::string::String;
@@ -250,20 +271,37 @@ pub mod owned {
         /// A small signed integer.
         Int(i32),
         /// A bignum with 1-byte digit count.
-        SmallBigInt { sign: u8, digits: Vec<u8> },
+        SmallBigInt {
+            /// Sign byte: 0 = positive, 1 = negative.
+            sign: u8,
+            /// Big-endian digits (least significant byte first).
+            digits: Vec<u8>,
+        },
         /// A bignum with 4-byte digit count.
-        LargeBigInt { sign: u8, digits: Vec<u8> },
+        LargeBigInt {
+            /// Sign byte: 0 = positive, 1 = negative.
+            sign: u8,
+            /// Big-endian digits (least significant byte first).
+            digits: Vec<u8>,
+        },
         /// An IEEE 754 double-precision float.
         Float(f64),
         /// A binary blob.
         Binary(Vec<u8>),
         /// A bitstring.
-        BitBinary { bits: u8, data: Vec<u8> },
+        BitBinary {
+            /// Number of significant bits in the last byte (1–8).
+            bits: u8,
+            /// Binary data padded to a whole number of bytes.
+            data: Vec<u8>,
+        },
         /// A proper list.
         List(Vec<OwnedTerm>),
         /// An improper list.
         ImproperList {
+            /// Prefix elements before the tail.
             elements: Vec<OwnedTerm>,
+            /// Non-nil tail term.
             tail: Box<OwnedTerm>,
         },
         /// A tuple.
