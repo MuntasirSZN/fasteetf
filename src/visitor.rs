@@ -405,12 +405,14 @@ fn visit_term<'a, V: Visitor>(
 
 // ── Integers ───────────────────────────────────────────────────────────────
 
+#[inline(always)]
 fn visit_int<'a, V: Visitor>(cursor: &mut Cursor<'a>, visitor: &mut V) -> Result<(), V::Error> {
     visitor.visit_int(cursor.read_u32()? as i32)
 }
 
 // ── Bignums ────────────────────────────────────────────────────────────────
 
+#[inline(always)]
 fn visit_small_big<'a, V: Visitor>(
     cursor: &mut Cursor<'a>,
     visitor: &mut V,
@@ -441,6 +443,7 @@ fn visit_large_big<'a, V: Visitor>(
 
 // ── Floats ─────────────────────────────────────────────────────────────────
 
+#[inline(always)]
 fn visit_new_float<'a, V: Visitor>(
     cursor: &mut Cursor<'a>,
     visitor: &mut V,
@@ -492,6 +495,7 @@ fn visit_small_atom_utf8<'a, V: Visitor>(
 
 // ── Tuples ─────────────────────────────────────────────────────────────────
 
+#[inline(always)]
 fn visit_small_tuple<'a, V: Visitor>(
     cursor: &mut Cursor<'a>,
     visitor: &mut V,
@@ -500,7 +504,7 @@ fn visit_small_tuple<'a, V: Visitor>(
 ) -> Result<(), V::Error> {
     let arity = cursor.read_u8()? as usize;
     if arity > limits.max_tuple_arity {
-        return Err(EtfError::MapTooLarge.into());
+        return Err(EtfError::TupleTooLarge.into());
     }
     visitor.visit_tuple_start(arity)?;
     for _ in 0..arity {
@@ -517,7 +521,7 @@ fn visit_large_tuple<'a, V: Visitor>(
 ) -> Result<(), V::Error> {
     let arity = cursor.read_u32()? as usize;
     if arity > limits.max_tuple_arity {
-        return Err(EtfError::MapTooLarge.into());
+        return Err(EtfError::TupleTooLarge.into());
     }
     visitor.visit_tuple_start(arity)?;
     for _ in 0..arity {
@@ -528,6 +532,7 @@ fn visit_large_tuple<'a, V: Visitor>(
 
 // ── Lists / Nil / Strings ──────────────────────────────────────────────────
 
+#[inline(always)]
 fn visit_nil<V: Visitor>(visitor: &mut V) -> Result<(), V::Error> {
     visitor.visit_list_start(0)?;
     visitor.visit_list_end()
@@ -546,6 +551,7 @@ fn visit_string<'a, V: Visitor>(
     visitor.visit_string(bytes)
 }
 
+#[inline(always)]
 fn visit_list<'a, V: Visitor>(
     cursor: &mut Cursor<'a>,
     visitor: &mut V,
@@ -579,6 +585,7 @@ fn visit_list<'a, V: Visitor>(
 
 // ── Maps ───────────────────────────────────────────────────────────────────
 
+#[inline(always)]
 fn visit_map<'a, V: Visitor>(
     cursor: &mut Cursor<'a>,
     visitor: &mut V,

@@ -597,7 +597,7 @@ fn test_visitor_tuple_too_large() {
     };
     let mut v = EventLog::default();
     let err = parse_etf_with_visitor(&buf, None, None, &mut v, &tight).unwrap_err();
-    assert!(matches!(err, EtfError::MapTooLarge));
+    assert!(matches!(err, EtfError::TupleTooLarge));
 }
 
 #[test]

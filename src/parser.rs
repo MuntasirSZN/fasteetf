@@ -37,6 +37,14 @@ pub(crate) fn parse_term<'a>(
 }
 
 /// The inner dispatch — called once per nesting level by [`parse_term`].
+///
+/// Branch ordering is based on typical Erlang message frequency:
+/// 1. SMALL_INTEGER_EXT (most common integer representation)
+/// 2. ATOM_UTF8_EXT / SMALL_ATOM_UTF8_EXT (atoms are very common)
+/// 3. NIL_EXT / LIST_EXT (lists are common)
+/// 4. SMALL_TUPLE_EXT (tuples are common)
+/// 5. INTEGER_EXT, NEW_FLOAT_EXT (other simple types)
+/// 6. Rest in alphabetical/complexity order
 #[inline(always)]
 fn parse_term_inner<'a>(
     cursor: &mut Cursor<'a>,
@@ -45,56 +53,91 @@ fn parse_term_inner<'a>(
 ) -> Result<Term<'a>, EtfError> {
     let tag = cursor.read_u8()?;
 
-    // ── Fast path ──────────────────────────────────────────────────────
+    // ── Fast path: SMALL_INTEGER_EXT (most frequent tag) ──────────────
+    // Checked first because small integers are the most common term type
+    // in typical Erlang messages, improving branch prediction.
     if tag == SMALL_INTEGER_EXT {
-        return Ok(Term::Int(cursor.read_u8()? as i32));
+        // SAFETY: We just read a tag byte, so cursor has at least 1 byte.
+        // SMALL_INTEGER_EXT requires exactly 1 more byte for the value.
+        if !cursor.data.is_empty() {
+            unsafe {
+                return Ok(Term::Int(cursor.read_u8_unchecked() as i32));
+            }
+        }
+        return Err(cursor.eof_or_incomplete(1));
     }
 
-    // ── Second-fastest path: simple tags inlined here ──────────────────
+    // ── Single consolidated match ordered by frequency ─────────────────
     match tag {
-        INTEGER_EXT => return Ok(Term::Int(cursor.read_u32()? as i32)),
-        NEW_FLOAT_EXT => return Ok(Term::Float(cursor.read_f64()?)),
-        NIL_EXT => return Ok(Term::List(&[])),
-        _ => {}
-    }
+        // Simple, no-allocation types first (fastest to parse)
+        INTEGER_EXT => {
+            // SAFETY: INTEGER_EXT requires exactly 4 bytes for the value.
+            if cursor.data.len() >= 4 {
+                unsafe {
+                    return Ok(Term::Int(cursor.read_u32_unchecked() as i32));
+                }
+            }
+            Err(cursor.eof_or_incomplete(4))
+        }
+        NEW_FLOAT_EXT => {
+            // SAFETY: NEW_FLOAT_EXT requires exactly 8 bytes for the value.
+            if cursor.data.len() >= 8 {
+                unsafe {
+                    return Ok(Term::Float(cursor.read_f64_unchecked()));
+                }
+            }
+            Err(cursor.eof_or_incomplete(8))
+        }
+        NIL_EXT => Ok(Term::List(&[])),
 
-    match tag {
-        SMALL_BIG_EXT => parse_small_big(cursor, arena, depth),
-        LARGE_BIG_EXT => parse_large_big(cursor, arena, depth),
-
-        FLOAT_EXT => parse_legacy_float(cursor, arena, depth),
-
+        // Atoms (very common in Erlang messages)
         ATOM_UTF8_EXT => parse_atom_utf8(cursor, arena, depth),
         SMALL_ATOM_UTF8_EXT => parse_small_atom_utf8(cursor, arena, depth),
 
+        // Lists and tuples (common compound types)
         SMALL_TUPLE_EXT => parse_small_tuple(cursor, arena, depth),
         LARGE_TUPLE_EXT => parse_large_tuple(cursor, arena, depth),
-
-        STRING_EXT => parse_string(cursor, arena, depth),
         LIST_EXT => parse_list(cursor, arena, depth),
+        STRING_EXT => parse_string(cursor, arena, depth),
 
+        // Maps (increasingly common)
         MAP_EXT => parse_map(cursor, arena, depth),
 
+        // Binaries
         BINARY_EXT => parse_binary(cursor, arena, depth),
         BIT_BINARY_EXT => parse_bit_binary(cursor, arena, depth),
 
+        // Bignums
+        SMALL_BIG_EXT => parse_small_big(cursor, arena, depth),
+        LARGE_BIG_EXT => parse_large_big(cursor, arena, depth),
+
+        // Floats (legacy)
+        FLOAT_EXT => parse_legacy_float(cursor, arena, depth),
+
+        // Process identifiers
         PID_EXT => parse_pid_legacy(cursor, arena, depth),
         NEW_PID_EXT => parse_pid_new(cursor, arena, depth),
 
+        // Ports
         PORT_EXT => parse_port_legacy(cursor, arena, depth),
         NEW_PORT_EXT => parse_port_new(cursor, arena, depth),
         V4_PORT_EXT => parse_port_v4(cursor, arena, depth),
 
+        // References
         NEW_REFERENCE_EXT => parse_ref_legacy(cursor, arena, depth),
         NEWER_REFERENCE_EXT => parse_ref_newer(cursor, arena, depth),
 
+        // Functions
         NEW_FUN_EXT => parse_new_fun(cursor, arena, depth),
         EXPORT_EXT => parse_export(cursor, arena, depth),
 
+        // Records (OTP 29+)
         RECORD_EXT => parse_record(cursor, arena, depth),
 
+        // Unsupported tags
         LOCAL_EXT | COMPRESSED | ATOM_CACHE_REF => Err(EtfError::UnsupportedTag(tag)),
 
+        // Unknown tag
         _ => Err(EtfError::UnsupportedTag(tag)),
     }
 }
@@ -214,7 +257,7 @@ fn parse_tuple_elements<'a>(
     depth: &mut usize,
 ) -> Result<&'a [Term<'a>], EtfError> {
     if arity > arena.limits().max_tuple_arity {
-        return Err(EtfError::MapTooLarge);
+        return Err(EtfError::TupleTooLarge);
     }
     let elements = arena.alloc_slice(arity)?;
     for elem in elements.iter_mut() {

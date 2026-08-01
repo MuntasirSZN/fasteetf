@@ -18,7 +18,7 @@ impl<'a> Cursor<'a> {
     /// Create a new cursor over `data` (non-streaming).
     #[inline(always)]
     pub(crate) fn new(data: &'a [u8]) -> Self {
-        Cursor {
+        Self {
             original: data,
             data,
             streaming: false,
@@ -28,7 +28,7 @@ impl<'a> Cursor<'a> {
     /// Create a new cursor in **streaming** mode.
     #[inline(always)]
     pub(crate) fn new_streaming(data: &'a [u8]) -> Self {
-        Cursor {
+        Self {
             original: data,
             data,
             streaming: true,
@@ -51,7 +51,7 @@ impl<'a> Cursor<'a> {
     /// Return the number of bytes that would be needed to make progress,
     /// or [`UnexpectedEof`] if not in streaming mode.
     #[inline(always)]
-    fn eof_or_incomplete(&self, needed: usize) -> EtfError {
+    pub(crate) fn eof_or_incomplete(&self, needed: usize) -> EtfError {
         if self.streaming {
             EtfError::Incomplete(Needed::Size(needed))
         } else {
@@ -118,5 +118,52 @@ impl<'a> Cursor<'a> {
         ]);
         self.data = &self.data[8..];
         Ok(val)
+    }
+
+    // ── Unchecked reads (unsafe, for hot paths) ────────────────────────────
+
+    /// Unsafe version of `read_u8` - caller must ensure `!self.data.is_empty()`.
+    ///
+    /// # Safety
+    /// The caller must guarantee that `self.data` is not empty.
+    #[inline(always)]
+    pub(crate) unsafe fn read_u8_unchecked(&mut self) -> u8 {
+        debug_assert!(!self.data.is_empty());
+        let b = self.data[0];
+        self.data = &self.data[1..];
+        b
+    }
+
+    /// Unsafe version of `read_u32` - caller must ensure `self.data.len() >= 4`.
+    ///
+    /// # Safety
+    /// The caller must guarantee that `self.data` has at least 4 bytes.
+    #[inline(always)]
+    pub(crate) unsafe fn read_u32_unchecked(&mut self) -> u32 {
+        debug_assert!(self.data.len() >= 4);
+        let val = u32::from_be_bytes([self.data[0], self.data[1], self.data[2], self.data[3]]);
+        self.data = &self.data[4..];
+        val
+    }
+
+    /// Unsafe version of `read_f64` - caller must ensure `self.data.len() >= 8`.
+    ///
+    /// # Safety
+    /// The caller must guarantee that `self.data` has at least 8 bytes.
+    #[inline(always)]
+    pub(crate) unsafe fn read_f64_unchecked(&mut self) -> f64 {
+        debug_assert!(self.data.len() >= 8);
+        let val = f64::from_be_bytes([
+            self.data[0],
+            self.data[1],
+            self.data[2],
+            self.data[3],
+            self.data[4],
+            self.data[5],
+            self.data[6],
+            self.data[7],
+        ]);
+        self.data = &self.data[8..];
+        val
     }
 }

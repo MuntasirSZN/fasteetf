@@ -139,6 +139,12 @@ pub enum EtfError {
     #[error("list exceeds maximum length")]
     ListTooLarge,
 
+    /// A tuple arity exceeds [`MAX_TUPLE_ARITY`].
+    ///
+    /// [`MAX_TUPLE_ARITY`]: crate::limits::MAX_TUPLE_ARITY
+    #[error("tuple exceeds maximum arity")]
+    TupleTooLarge,
+
     /// A map arity exceeds [`MAX_MAP_LEN`].
     ///
     /// [`MAX_MAP_LEN`]: crate::limits::MAX_MAP_LEN
