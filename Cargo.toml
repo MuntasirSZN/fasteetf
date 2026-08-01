@@ -174,3 +174,31 @@ zlib-rs = { version = "0.6.3", default-features = false, features = [
 name = "parse"
 harness = false
 required-features = ["std"]
+
+[[test]]
+name = "parse"
+required-features = ["alloc"]
+
+[[test]]
+name = "encoding"
+required-features = ["alloc"]
+
+[[test]]
+name = "compression"
+required-features = ["alloc", "compression"]
+
+[[test]]
+name = "streaming"
+required-features = ["alloc"]
+
+[[test]]
+name = "visitor"
+required-features = ["alloc"]
+
+[[test]]
+name = "serde"
+required-features = ["serde"]
+
+[[test]]
+name = "proptest"
+required-features = ["alloc"]

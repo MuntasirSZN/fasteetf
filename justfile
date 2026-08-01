@@ -8,7 +8,7 @@ format := "cargo fmt --all"
 clippy := "cargo clippy --all-targets --all-features"
 coverage := "cargo llvm-cov --all-features --workspace"
 build := "cargo build --all-features --locked"
-nextest := "cargo hack nextest run --locked --optional-deps --each-feature"
+nextest := "cargo hack nextest run --no-tests=pass --locked --optional-deps --each-feature"
 
 # Default recipe (shows help)
 _default:

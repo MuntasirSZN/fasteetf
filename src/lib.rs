@@ -19,9 +19,10 @@
 //!
 //! # Example
 //! ```rust
-//! # use fasteetf::encode_to_vec;
+//! # use fasteetf::encode_to_buf;
 //! let atom = fasteetf::Term::from("hello");
-//! let buf = encode_to_vec(&atom).unwrap();
+//! let mut buf = [0u8; 64];
+//! let n = encode_to_buf(&atom, &mut buf).unwrap();
 //! ```
 
 #![no_std]
