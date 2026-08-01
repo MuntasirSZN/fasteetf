@@ -159,8 +159,8 @@ mod miniz_oxide_impl {
 
     #[inline]
     pub fn decompress(target: &mut [u8], input: &[u8]) -> Result<(), EtfError> {
-        use ::miniz_oxide::inflate::stream::InflateState;
-        use ::miniz_oxide::{DataFormat, MZFlush, MZStatus};
+        use miniz_oxide::inflate::stream::InflateState;
+        use miniz_oxide::{DataFormat, MZFlush, MZStatus};
 
         let mut state = InflateState::new(DataFormat::Zlib);
 
@@ -224,9 +224,9 @@ mod miniz_oxide_impl {
     #[cfg(feature = "alloc")]
     #[inline]
     pub fn compress(target: &mut [u8], input: &[u8]) -> Result<usize, EtfError> {
-        use ::miniz_oxide::deflate::core::CompressorOxide;
-        use ::miniz_oxide::deflate::stream::deflate;
-        use ::miniz_oxide::{MZFlush, MZStatus};
+        use miniz_oxide::deflate::core::CompressorOxide;
+        use miniz_oxide::deflate::stream::deflate;
+        use miniz_oxide::{MZFlush, MZStatus};
 
         // `CompressorOxide::default()` configures the zlib wrapper
         // (writes a 2-byte zlib header and a 4-byte adler32 trailer).
@@ -352,17 +352,19 @@ mod libz_ng_sys_impl {
 #[cfg(feature = "cloudflare-zlib")]
 mod cloudflare_zlib_impl {
     use super::EtfError;
-    use core::ffi::{c_int, c_ulong};
+    use core::ffi::c_int;
 
+    // cloudflare_zlib_sys defines uLong/uLongf as u64 (see its zconf.h).
+    // We use u64 directly rather than c_ulong, which is u32 on Windows.
     #[inline]
     pub fn decompress(target: &mut [u8], input: &[u8]) -> Result<(), EtfError> {
-        let mut out_len: c_ulong = target.len() as c_ulong;
+        let mut out_len: u64 = target.len() as u64;
         let rc: c_int = unsafe {
             ::cloudflare_zlib_sys::uncompress(
                 target.as_mut_ptr(),
                 &mut out_len,
                 input.as_ptr(),
-                input.len() as c_ulong,
+                input.len() as u64,
             )
         };
         if rc != 0 {
@@ -375,13 +377,13 @@ mod cloudflare_zlib_impl {
 
     #[inline]
     pub fn compress(target: &mut [u8], input: &[u8]) -> Result<usize, EtfError> {
-        let mut out_len: c_ulong = target.len() as c_ulong;
+        let mut out_len: u64 = target.len() as u64;
         let rc: c_int = unsafe {
             ::cloudflare_zlib_sys::compress2(
                 target.as_mut_ptr(),
                 &mut out_len,
                 input.as_ptr(),
-                input.len() as c_ulong,
+                input.len() as u64,
                 Z_DEFAULT_COMPRESSION,
             )
         };
