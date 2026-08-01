@@ -176,6 +176,28 @@ impl<'a> PartialEq<AtomUtf8<'a>> for &str {
     }
 }
 
+impl<'a> From<&'a str> for AtomUtf8<'a> {
+    #[inline(always)]
+    fn from(s: &'a str) -> Self {
+        // &str is guaranteed valid UTF-8, so this is safe.
+        unsafe { Self::from_bytes_unchecked(s.as_bytes()) }
+    }
+}
+
+impl<'a> From<AtomUtf8<'a>> for Term<'a> {
+    #[inline(always)]
+    fn from(atom: AtomUtf8<'a>) -> Self {
+        Term::Atom(atom)
+    }
+}
+
+impl<'a> From<&'a str> for Term<'a> {
+    #[inline(always)]
+    fn from(s: &'a str) -> Self {
+        Term::Atom(AtomUtf8::from(s))
+    }
+}
+
 // ── Opaque identifier wrappers ──────────────────────────────────────────────
 //
 // These wrap the raw wire-format bytes for the corresponding types.  The
