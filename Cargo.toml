@@ -159,7 +159,7 @@ libz-ng-sys = { version = "1.1.16", default-features = false, optional = true }
 cloudflare-zlib-sys = { version = "0.3.6", optional = true }
 
 [dev-dependencies]
-divan = "0.1"
+divan = { version = "5.0.1", package = "codspeed-divan-compat" }
 proptest = "1"
 serde_json = "1"
 # Used by integration tests to construct zlib-compressed ETF fixtures
