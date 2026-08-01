@@ -1,0 +1,175 @@
+name: CI
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+permissions:
+  contents: read
+env:
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+jobs:
+  msrv:
+    name: MSRV
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.parse.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Parse MSRV from Cargo.toml
+        id: parse
+        run: |
+          MSRV=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)
+          echo "version=$MSRV" >> "$GITHUB_OUTPUT"
+          echo "Found MSRV: $MSRV"
+
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Rust
+        uses: moonrepo/setup-rust@abb2d32350334249b178c401e5ec5836e0cd88d3 # v1.3.0
+        with:
+          components: rustfmt
+          bins: just
+      - name: Check formatting
+        run: just fmt-check
+  clippy:
+    name: Clippy (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Rust
+        uses: moonrepo/setup-rust@abb2d32350334249b178c401e5ec5836e0cd88d3 # v1.3.0
+        with:
+          components: clippy
+          bins: cargo-hack,just
+      - name: Run clippy
+        run: just lint-features && just lint
+  test:
+    name: Test (${{ matrix.rust }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: msrv
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        rust: [stable, "${{ needs.msrv.outputs.version }}"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Rust
+        uses: moonrepo/setup-rust@abb2d32350334249b178c401e5ec5836e0cd88d3 # v1.3.0
+        with:
+          channel: ${{ matrix.rust }}
+          bins: cargo-nextest,just,cargo-hack
+      - name: Build
+        run: just build
+      - name: Run tests
+        run: |
+          just test
+  check:
+    name: Feature Build (${{ matrix.rust }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: msrv
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        rust: [stable, "${{ needs.msrv.outputs.version }}"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Rust
+        uses: moonrepo/setup-rust@abb2d32350334249b178c401e5ec5836e0cd88d3 # v1.3.0
+        with:
+          channel: ${{ matrix.rust }}
+          bins: cargo-hack,just
+      - name: Check
+        run: just check-features
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Rust
+        uses: moonrepo/setup-rust@abb2d32350334249b178c401e5ec5836e0cd88d3 # v1.3.0
+        with:
+          bins: just
+      - name: Build documentation
+        run: just docs-ci
+  deny:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup rust toolchain, cache, install nextest, just and cargo-llvm-cov
+        uses: moonrepo/setup-rust@abb2d32350334249b178c401e5ec5836e0cd88d3 # v1.3.0
+        with:
+          channel: nightly
+          components: llvm-tools
+          cache-target: test
+          bins: just,cargo-nextest,cargo-llvm-cov
+      - name: Generate coverage
+        run: just coverage-ci
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          files: target/nextest/default/junit.xml
+          report-type: test_results
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          files: lcov.info
+          fail_ci_if_error: false

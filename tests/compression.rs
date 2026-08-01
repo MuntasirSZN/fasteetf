@@ -91,6 +91,7 @@ fn make_arena() -> Vec<MaybeUninit<u8>> {
 
 // ── Compile-time backend ──────────────────────────────────────────────────
 
+#[cfg(not(miri))]
 #[cfg(any(
     feature = "zlib-rs",
     feature = "miniz_oxide",
@@ -123,6 +124,7 @@ fn decompresses_via_compile_time_backend() {
     assert!(matches!(term, Term::Int(42)));
 }
 
+#[cfg(not(miri))]
 #[cfg(any(
     feature = "zlib-rs",
     feature = "miniz_oxide",
@@ -379,6 +381,7 @@ fn zlib_rs_decompress(target: &mut [u8], input: &[u8]) -> Result<(), EtfError> {
     Ok(())
 }
 
+#[cfg(not(miri))]
 #[test]
 fn encode_to_compressed_roundtrip_with_compile_time_backend() {
     let term = Term::Int(42);
@@ -446,6 +449,7 @@ fn encode_to_compressed_roundtrip_with_runtime_backend() {
     assert!(matches!(parsed, Term::Int(2026)));
 }
 
+#[cfg(not(miri))]
 #[test]
 fn encode_to_compressed_uncompressed_size_matches_encoded_term() {
     // Build a more interesting term so the uncompressed size is not

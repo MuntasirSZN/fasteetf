@@ -1,0 +1,20 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      version:
+        applies-to: version-updates
+        update-types:
+          - patch
+          - minor
+    cooldown:
+      default-days: 7
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7

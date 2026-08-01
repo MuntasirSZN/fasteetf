@@ -1,0 +1,38 @@
+name: CodSpeed Benchmarks
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  benchmarks:
+    name: Run benchmarks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Parse MSRV from Cargo.toml
+        id: msrv
+        run: |
+          MSRV=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)
+          echo "version=$MSRV" >> "$GITHUB_OUTPUT"
+          echo "Found MSRV: $MSRV"
+      - name: Setup rust toolchain, cache and cargo-codspeed binary
+        uses: moonrepo/setup-rust@abb2d32350334249b178c401e5ec5836e0cd88d3 # v1.3.0
+        with:
+          channel: ${{ steps.msrv.outputs.version }}
+          cache-target: release
+          bins: cargo-codspeed
+      - name: Build the benchmark target(s)
+        run: cargo codspeed build
+      - name: Run the benchmarks
+        uses: CodSpeedHQ/action@88472375d0a4572cf70a9f1fe3a4e0ab8da1b924 # v5.0.1
+        with:
+          mode: simulation,memory
+          run: cargo codspeed run

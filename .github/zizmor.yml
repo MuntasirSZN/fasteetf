@@ -1,0 +1,7 @@
+rules:
+  dangerous-triggers:
+    ignore:
+      - validate-pr-title.yml
+  superfluous-actions:
+    ignore:
+      - release.yml

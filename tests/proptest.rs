@@ -11,6 +11,7 @@ mod common;
 use common::*;
 use fasteetf::*;
 
+#[cfg(not(miri))]
 #[test]
 fn test_proptest_roundtrip_small_int() {
     // SMALL_INTEGER_EXT is unsigned (0–255). Use u8 to avoid sign-extension issues.
@@ -22,6 +23,7 @@ fn test_proptest_roundtrip_small_int() {
     });
 }
 
+#[cfg(not(miri))]
 #[test]
 fn test_proptest_roundtrip_int() {
     proptest::proptest!(|(val: i32)| {
@@ -33,6 +35,7 @@ fn test_proptest_roundtrip_int() {
     });
 }
 
+#[cfg(not(miri))]
 #[test]
 fn test_proptest_roundtrip_float() {
     proptest::proptest!(|(val: f64)| {
@@ -46,6 +49,7 @@ fn test_proptest_roundtrip_float() {
     });
 }
 
+#[cfg(not(miri))]
 #[test]
 fn test_proptest_roundtrip_binary() {
     proptest::proptest!(|(data: Vec<u8>)| {
@@ -59,6 +63,7 @@ fn test_proptest_roundtrip_binary() {
     });
 }
 
+#[cfg(not(miri))]
 #[test]
 fn test_proptest_roundtrip_atom() {
     proptest::proptest!(|(s: String)| {

@@ -74,14 +74,22 @@ impl<'a> Bump<'a> {
 
         // Align pointer up to T's alignment.
         let addr = (self.ptr as usize + align - 1) & !(align - 1);
-        let ptr = addr as *mut u8;
 
-        // SAFETY: we checked that ptr + size fits inside the buffer.
-        let end = unsafe { ptr.add(size) };
-        if end > self.end {
+        // Check that the aligned pointer is still within bounds.
+        if addr >= self.end as usize {
             return Err(EtfError::ArenaExhausted);
         }
 
+        let ptr = addr as *mut u8;
+
+        // Check if the allocation would fit before doing ptr.add(size).
+        // ptr.add() is UB if it would go out of bounds.
+        let remaining = (self.end as usize).saturating_sub(addr);
+        if size > remaining {
+            return Err(EtfError::ArenaExhausted);
+        }
+
+        let end = unsafe { ptr.add(size) };
         self.ptr = end;
 
         unsafe { Ok(core::slice::from_raw_parts_mut(ptr as *mut T, len)) }
