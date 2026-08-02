@@ -197,6 +197,11 @@ path = "tests/streaming/mod.rs"
 required-features = ["alloc"]
 
 [[test]]
+name = "limits"
+path = "tests/limits/mod.rs"
+required-features = ["alloc"]
+
+[[test]]
 name = "visitor"
 path = "tests/visitor/mod.rs"
 required-features = ["alloc"]

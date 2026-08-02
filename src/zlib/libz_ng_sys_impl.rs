@@ -39,3 +39,45 @@ pub(crate) fn compress(target: &mut [u8], input: &[u8]) -> Result<usize, EtfErro
     }
     Ok(out_len)
 }
+
+#[cfg(test)]
+#[cfg(not(miri))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn roundtrip() {
+        let input = b"hello libz-ng roundtrip payload";
+        let mut compressed = [0u8; 128];
+        let n = compress(&mut compressed, input).unwrap();
+        assert!(n > 0 && n < compressed.len());
+        let mut out = [0u8; 64];
+        decompress(&mut out, &compressed[..n]).unwrap();
+        assert_eq!(&out[..input.len()], input);
+    }
+
+    #[test]
+    fn decompress_corrupt_input() {
+        let mut out = [0u8; 16];
+        let err = decompress(&mut out, b"not a zlib stream").unwrap_err();
+        assert!(matches!(err, EtfError::DecompressionFailed));
+    }
+
+    #[test]
+    fn decompress_undersized_target() {
+        let input = b"a somewhat longer payload to compress";
+        let mut compressed = [0u8; 128];
+        let n = compress(&mut compressed, input).unwrap();
+        let mut out = [0u8; 4];
+        let err = decompress(&mut out, &compressed[..n]).unwrap_err();
+        assert!(matches!(err, EtfError::DecompressionFailed));
+    }
+
+    #[test]
+    fn compress_undersized_target() {
+        let input = [0xABu8; 256];
+        let mut target = [0u8; 4];
+        let err = compress(&mut target, &input).unwrap_err();
+        assert!(matches!(err, EtfError::CompressionFailed));
+    }
+}

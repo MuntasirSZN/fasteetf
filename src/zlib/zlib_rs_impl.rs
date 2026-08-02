@@ -25,13 +25,51 @@ pub(crate) fn decompress(target: &mut [u8], input: &[u8]) -> Result<(), EtfError
 #[inline]
 pub(crate) fn compress(target: &mut [u8], input: &[u8]) -> Result<usize, EtfError> {
     // `compress_slice` writes a zlib-wrapped (header + adler32) deflate
-    // stream into `target` and returns the unused tail of `target`.
-    // The number of compressed bytes is therefore the original
-    // `target` length minus the returned tail's length.
-    let target_len = target.len();
-    let (tail, rc) = ::zlib_rs::compress_slice(target, input, Default::default());
+    // stream into `target` and returns the subslice of `target` holding
+    // the compressed bytes; its length is the compressed size.
+    let (compressed, rc) = ::zlib_rs::compress_slice(target, input, Default::default());
     if rc != ::zlib_rs::ReturnCode::Ok {
         return Err(EtfError::CompressionFailed);
     }
-    Ok(target_len - tail.len())
+    Ok(compressed.len())
+}
+
+#[cfg(test)]
+#[cfg(not(miri))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decompress_corrupt_input() {
+        let mut out = [0u8; 16];
+        let err = decompress(&mut out, b"not a zlib stream").unwrap_err();
+        assert!(matches!(err, EtfError::DecompressionFailed));
+    }
+
+    // Compression needs the `alloc` feature (it drives the zlib-rs stream).
+    #[cfg(feature = "alloc")]
+    mod alloc_tests {
+        use super::*;
+        use alloc::vec;
+
+        #[test]
+        fn roundtrip() {
+            let input = b"hello zlib-rs roundtrip payload";
+            let mut compressed = vec![0u8; ::zlib_rs::compress_bound(input.len())];
+            let n = compress(&mut compressed, input).unwrap();
+            assert!(n > 0 && n < compressed.len());
+            let mut out = vec![0u8; input.len()];
+            decompress(&mut out, &compressed[..n]).unwrap();
+            assert_eq!(&out, input);
+        }
+
+        #[test]
+        fn compress_undersized_target() {
+            // 256 incompressible bytes cannot fit in a 4-byte target.
+            let input = [0xABu8; 256];
+            let mut target = [0u8; 4];
+            let err = compress(&mut target, &input).unwrap_err();
+            assert!(matches!(err, EtfError::CompressionFailed));
+        }
+    }
 }

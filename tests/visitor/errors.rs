@@ -194,3 +194,170 @@ fn test_visitor_atom_cache_ref_unsupported() {
     let err = run_visitor(b"\x83\x52\x00", &mut v).unwrap_err();
     assert!(matches!(err, EtfError::UnsupportedTag(82)));
 }
+
+// ── Remaining limit variants ────────────────────────────────────────────────
+
+#[test]
+fn test_visitor_atom_utf8_ext_too_large() {
+    // ATOM_UTF8_EXT (118) with len > max_atom_len (SMALL_ATOM_UTF8_EXT is
+    // covered above).
+    let buf = vec![131, 118, 0, 3, b'a', b'b', b'c'];
+    let tight = Limits {
+        max_atom_len: 2,
+        ..Limits::default()
+    };
+    let mut v = EventLog::default();
+    let err = parse_etf_with_visitor(&buf, None, None, &mut v, &tight).unwrap_err();
+    assert!(matches!(err, EtfError::AtomTooLarge));
+}
+
+#[test]
+fn test_visitor_small_big_ext_too_large() {
+    // SMALL_BIG_EXT (110) with len > max_binary_size.
+    let buf = vec![131, 110, 4, 0, 1, 2, 3, 4]; // 4-digit bignum
+    let tight = Limits {
+        max_binary_size: 3,
+        ..Limits::default()
+    };
+    let mut v = EventLog::default();
+    let err = parse_etf_with_visitor(&buf, None, None, &mut v, &tight).unwrap_err();
+    assert!(matches!(err, EtfError::BinaryTooLarge));
+}
+
+#[test]
+fn test_visitor_bit_binary_too_large() {
+    // BIT_BINARY_EXT (77) with a data length > max_bit_binary_size.
+    let buf = vec![131, 77, 0, 0, 0, 4, 4, 0xAB, 0xCD, 0xEF, 0x12];
+    let tight = Limits {
+        max_bit_binary_size: 3,
+        ..Limits::default()
+    };
+    let mut v = EventLog::default();
+    let err = parse_etf_with_visitor(&buf, None, None, &mut v, &tight).unwrap_err();
+    assert!(matches!(err, EtfError::BinaryTooLarge));
+}
+
+#[test]
+fn test_visitor_small_tuple_too_large() {
+    // SMALL_TUPLE_EXT (104) with arity > max_tuple_arity.
+    let buf = vec![131, 104, 3, 97, 1, 97, 2, 97, 3];
+    let tight = Limits {
+        max_tuple_arity: 2,
+        ..Limits::default()
+    };
+    let mut v = EventLog::default();
+    let err = parse_etf_with_visitor(&buf, None, None, &mut v, &tight).unwrap_err();
+    assert!(matches!(err, EtfError::TupleTooLarge));
+}
+
+#[test]
+fn test_visitor_newer_reference_too_large() {
+    // NEWER_REFERENCE_EXT (90) with len > max_reference_words.  Mirrors the
+    // NEW_REFERENCE_EXT case, including the shared ListTooLarge mapping.
+    let buf = vec![131, 90, 0, 3]; // 3 words
+    let tight = Limits {
+        max_reference_words: 2,
+        ..Limits::default()
+    };
+    let mut v = EventLog::default();
+    let err = parse_etf_with_visitor(&buf, None, None, &mut v, &tight).unwrap_err();
+    assert!(matches!(err, EtfError::ListTooLarge));
+}
+
+#[test]
+fn test_visitor_record_too_large() {
+    // RECORD_EXT (67) with more fields than max_map_len.
+    let buf = vec![131, 67, 0, 0, 0, 3, 0, 97, 1, 97, 2, 97, 3]; // 3 fields
+    let tight = Limits {
+        max_map_len: 2,
+        ..Limits::default()
+    };
+    let mut v = EventLog::default();
+    let err = parse_etf_with_visitor(&buf, None, None, &mut v, &tight).unwrap_err();
+    assert!(matches!(err, EtfError::MapTooLarge));
+}
+
+// ── Compressed input ────────────────────────────────────────────────────────
+
+/// Build a COMPRESSED-tagged ETF byte sequence wrapping `inner` (magic,
+/// tag, BE u32 uncompressed size, zlib stream).  Uses the `zlib-rs`
+/// dev-dependency, mirroring `tests/compression/mod.rs`.
+#[cfg(feature = "compression")]
+fn compressed_visitor_wire(inner: &[u8]) -> Vec<u8> {
+    let mut buf = vec![0u8; zlib_rs::compress_bound(inner.len())];
+    let (compressed, rc) = zlib_rs::compress_slice(&mut buf, inner, Default::default());
+    assert_eq!(rc, zlib_rs::ReturnCode::Ok);
+    let mut out = Vec::with_capacity(6 + compressed.len());
+    out.push(131);
+    out.push(0x50); // COMPRESSED
+    out.extend_from_slice(&(inner.len() as u32).to_be_bytes());
+    out.extend_from_slice(compressed);
+    out
+}
+
+/// A runtime [`ZlibBackend`]-style decompressor backed by the `zlib-rs`
+/// dev-dependency.  Used so the tests pass regardless of which (if any)
+/// `zlib-*` feature is compiled into the crate.
+#[cfg(feature = "compression")]
+fn zlib_rs_decompress(target: &mut [u8], input: &[u8]) -> Result<(), EtfError> {
+    let (_, rc) = zlib_rs::decompress_slice(target, input, Default::default());
+    if rc != zlib_rs::ReturnCode::Ok {
+        return Err(EtfError::DecompressionFailed);
+    }
+    Ok(())
+}
+
+#[cfg(feature = "compression")]
+#[test]
+fn test_visitor_compressed_missing_buffer() {
+    let wire = compressed_visitor_wire(&[97, 42]);
+    let mut v = EventLog::default();
+    let err = parse_etf_with_visitor(
+        &wire,
+        None,
+        Some(zlib_rs_decompress),
+        &mut v,
+        &Limits::default(),
+    )
+    .unwrap_err();
+    assert!(matches!(err, EtfError::InsufficientDecompressionBuffer));
+}
+
+#[cfg(feature = "compression")]
+#[test]
+fn test_visitor_compressed_undersized_buffer() {
+    let wire = compressed_visitor_wire(&[97, 42]);
+    let mut decomp = [0u8; 1]; // inner term needs 2 bytes
+    let mut v = EventLog::default();
+    let err = parse_etf_with_visitor(
+        &wire,
+        Some(&mut decomp),
+        Some(zlib_rs_decompress),
+        &mut v,
+        &Limits::default(),
+    )
+    .unwrap_err();
+    assert!(matches!(err, EtfError::InsufficientDecompressionBuffer));
+}
+
+#[cfg(feature = "compression")]
+#[test]
+fn test_visitor_compressed_roundtrip() {
+    // Inner: the list [1, 2].
+    let inner = [108, 0, 0, 0, 2, 97, 1, 97, 2, 106];
+    let wire = compressed_visitor_wire(&inner);
+    let mut decomp = [0u8; 64];
+    let mut v = EventLog::default();
+    parse_etf_with_visitor(
+        &wire,
+        Some(&mut decomp),
+        Some(zlib_rs_decompress),
+        &mut v,
+        &Limits::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        v.events,
+        vec!["list_start(len=2)", "int(1)", "int(2)", "list_end"]
+    );
+}

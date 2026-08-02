@@ -152,6 +152,18 @@ fn test_encode_large_tuple() {
     assert_eq!(arity, 300);
 }
 
+// ── String encoding ────────────────────────────────────────────────────────
+
+#[test]
+fn test_encode_string_ext() {
+    let encoded = encode_ok(&Term::String(b"abc"));
+    assert_eq!(encoded, &[131, 107, 0, 3, b'a', b'b', b'c']);
+
+    // Empty string uses STRING_EXT with length 0.
+    let encoded = encode_ok(&Term::String(b""));
+    assert_eq!(encoded, &[131, 107, 0, 0]);
+}
+
 // ── List encoding ──────────────────────────────────────────────────────────
 
 #[test]
@@ -175,6 +187,19 @@ fn test_encode_improper_list() {
     let input = b"\x83\x6c\x00\x00\x00\x01\x61\x01\x61\x02";
     let encoded = with_parse(input, |term| encode_ok(&term));
     assert_eq!(encoded, input);
+}
+
+// ── Improper-list encoding ─────────────────────────────────────────────────
+
+#[test]
+fn test_encode_improper_list_too_short() {
+    // An improper list must have at least one element plus the tail; a term
+    // with fewer than two entries is malformed.
+    let err = encode_to_vec(&Term::ImproperList(&[])).unwrap_err();
+    assert!(matches!(err, EtfError::InvalidSize));
+    let single = [Term::Int(1)];
+    let err = encode_to_vec(&Term::ImproperList(&single)).unwrap_err();
+    assert!(matches!(err, EtfError::InvalidSize));
 }
 
 // ── Map encoding ───────────────────────────────────────────────────────────

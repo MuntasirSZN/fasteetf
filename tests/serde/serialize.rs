@@ -38,6 +38,15 @@ fn test_serde_serialize_binary() {
 }
 
 #[test]
+fn test_serde_serialize_string() {
+    // STRING_EXT data goes through serialize_bytes, so it serializes as
+    // a JSON byte array (not a quoted string).
+    let term = Term::String(b"abc");
+    let json = serde_json::to_string(&term).unwrap();
+    assert_eq!(json, "[97,98,99]");
+}
+
+#[test]
 fn test_serde_serialize_list() {
     let terms = [Term::Int(1), Term::Int(2), Term::Int(3)];
     let term = Term::List(&terms);
@@ -194,10 +203,12 @@ fn test_serde_owned_serialize_small_big() {
 
 #[test]
 fn test_serde_owned_serialize_large_big() {
-    let term = OwnedTerm::SmallBigInt {
+    let term = OwnedTerm::LargeBigInt {
         sign: 0,
         digits: vec![9, 8, 7],
     };
+    // serde_json drops the struct name, but the LargeBigInt branch of
+    // `Serialize for OwnedTerm` is exercised.
     let json = serde_json::to_string(&term).unwrap();
     assert!(json.contains("\"sign\":0"));
     assert!(json.contains("\"digits\":[9,8,7]"));

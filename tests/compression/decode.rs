@@ -159,6 +159,59 @@ fn roundtrip_large_compressed_term() {
 // ── Error paths ───────────────────────────────────────────────────────────
 
 #[test]
+fn undersized_decompression_buffer_is_an_error_streaming() {
+    use fasteetf::parse_etf_streaming;
+
+    let wire = compressed_etf(&[97, 1]);
+    let mut decomp = [0u8; 1]; // too small: the inner term is 2 bytes
+    let mut arena = make_arena();
+
+    let err = parse_etf_streaming(ParseOptions {
+        input: &wire,
+        decompressed_buffer: Some(&mut decomp),
+        ast_arena: &mut arena,
+        limits: Limits::default(),
+        zlib_backend: None,
+    })
+    .unwrap_err();
+
+    assert!(matches!(err, EtfError::InsufficientDecompressionBuffer));
+}
+
+#[cfg(not(miri))]
+#[cfg(any(
+    feature = "zlib-rs",
+    feature = "miniz_oxide",
+    feature = "zlib",
+    feature = "zlib-default",
+    feature = "zlib-ng-compat",
+    feature = "zlib-ng",
+    feature = "cloudflare-zlib",
+))]
+#[test]
+fn corrupted_payload_compile_time_backend() {
+    // Same wire as `corrupted_zlib_payload_is_a_decompression_error` but
+    // with `zlib_backend: None`, so the failure surfaces from the
+    // compile-time backend rather than a runtime override.
+    let mut wire = vec![131, 0x50, 0, 0, 0, 5];
+    wire.extend_from_slice(&[0xff; 5]);
+
+    let mut decomp = vec![0u8; 5];
+    let mut arena = make_arena();
+
+    let err = parse_etf(ParseOptions {
+        input: &wire,
+        decompressed_buffer: Some(&mut decomp),
+        ast_arena: &mut arena,
+        limits: Limits::default(),
+        zlib_backend: None,
+    })
+    .unwrap_err();
+
+    assert!(matches!(err, EtfError::DecompressionFailed));
+}
+
+#[test]
 fn missing_decompression_buffer_is_an_error() {
     let wire = compressed_etf(&[97, 1]);
     let mut arena = make_arena();

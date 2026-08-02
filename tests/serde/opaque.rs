@@ -103,6 +103,55 @@ fn test_serde_untagged_opaque_visit_byte_buf() {
     assert_eq!(rec.0, vec![40, 50, 60]);
 }
 
+// ── TaggedOpaqueVisitor (Pid/Port/Reference/Function): drive visit_bytes ────
+// and visit_byte_buf (deserialize_bytes / deserialize_byte_buf on the
+// deserializer dispatch to these visitor methods).
+
+#[test]
+fn test_serde_tagged_opaque_visit_bytes() {
+    use fasteetf::owned::PidOwned;
+    struct BytesDeser(Vec<u8>);
+    impl<'de> serde_core::Deserializer<'de> for BytesDeser {
+        type Error = serde_json::Error;
+        fn deserialize_any<V: serde_core::de::Visitor<'de>>(
+            self,
+            visitor: V,
+        ) -> Result<V::Value, Self::Error> {
+            visitor.visit_bytes(&self.0)
+        }
+        serde_core::forward_to_deserialize_any! {
+            bool i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 char str string
+            bytes byte_buf option unit unit_struct newtype_struct seq tuple
+            tuple_struct map struct enum identifier ignored_any
+        }
+    }
+    let pid: PidOwned = serde_core::Deserialize::deserialize(BytesDeser(vec![1, 2, 3])).unwrap();
+    assert_eq!(pid.0, vec![1, 2, 3]);
+}
+
+#[test]
+fn test_serde_tagged_opaque_visit_byte_buf() {
+    use fasteetf::owned::ReferenceOwned;
+    struct ByteBufDeser(Vec<u8>);
+    impl<'de> serde_core::Deserializer<'de> for ByteBufDeser {
+        type Error = serde_json::Error;
+        fn deserialize_any<V: serde_core::de::Visitor<'de>>(
+            self,
+            visitor: V,
+        ) -> Result<V::Value, Self::Error> {
+            visitor.visit_byte_buf(self.0)
+        }
+        serde_core::forward_to_deserialize_any! {
+            bool i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 char str string
+            bytes byte_buf option unit unit_struct newtype_struct seq tuple
+            tuple_struct map struct enum identifier ignored_any
+        }
+    }
+    let r: ReferenceOwned =
+        serde_core::Deserialize::deserialize(ByteBufDeser(vec![7, 8, 9])).unwrap();
+    assert_eq!(r.0, vec![7, 8, 9]);
+}
+
 // ── expect() paths: trigger deserialization errors that name the visitor ────
 
 #[test]

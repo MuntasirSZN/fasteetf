@@ -78,3 +78,54 @@ pub(crate) fn compress(target: &mut [u8], input: &[u8]) -> Result<usize, EtfErro
         _ => Err(EtfError::CompressionFailed),
     }
 }
+
+#[cfg(test)]
+#[cfg(not(miri))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decompress_corrupt_input() {
+        let mut out = [0u8; 16];
+        let err = decompress(&mut out, b"not a zlib stream").unwrap_err();
+        assert!(matches!(err, EtfError::DecompressionFailed));
+    }
+
+    // Compression needs the `alloc` feature (miniz's deflate holds the
+    // dictionary on the heap when `with-alloc` is on).
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn roundtrip() {
+        // Exactly 32 bytes: miniz's decompress requires the target to be
+        // filled completely (the ETF wrapper sizes it from the header).
+        let input = b"abcdefghijklmnopqrstuvwxyz012345";
+        let mut compressed = [0u8; 128];
+        let n = compress(&mut compressed, input).unwrap();
+        assert!(n > 0 && n < compressed.len());
+        let mut out = [0u8; 32];
+        decompress(&mut out, &compressed[..n]).unwrap();
+        assert_eq!(&out, input);
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn decompress_size_mismatch() {
+        // The stream ends having written fewer bytes than the target holds.
+        let input = b"abc";
+        let mut compressed = [0u8; 128];
+        let n = compress(&mut compressed, input).unwrap();
+        assert!(n > 0 && n < compressed.len());
+        let mut out = [0u8; 64];
+        let err = decompress(&mut out, &compressed[..n]).unwrap_err();
+        assert!(matches!(err, EtfError::DecompressionFailed));
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn compress_undersized_target() {
+        let input = [0xABu8; 256];
+        let mut target = [0u8; 4];
+        let err = compress(&mut target, &input).unwrap_err();
+        assert!(matches!(err, EtfError::CompressionFailed));
+    }
+}

@@ -5,13 +5,15 @@ use super::*;
 /// zlib-rs' one-shot compress, exposed as a `ZlibCompressFn` so the
 /// runtime-backend path of `encode_to_compressed` is exercised even
 /// when the crate is built with a different compile-time backend.
+///
+/// `compress_slice` returns the subslice holding the compressed bytes,
+/// so its length *is* the compressed size.
 fn zlib_rs_compress(target: &mut [u8], input: &[u8]) -> Result<usize, EtfError> {
-    let target_len = target.len();
-    let (tail, rc) = zlib_rs::compress_slice(target, input, Default::default());
+    let (compressed, rc) = zlib_rs::compress_slice(target, input, Default::default());
     if rc != zlib_rs::ReturnCode::Ok {
         return Err(EtfError::CompressionFailed);
     }
-    Ok(target_len - tail.len())
+    Ok(compressed.len())
 }
 
 /// A `ZlibDecompressFn` that delegates to zlib-rs, used to verify that
@@ -136,4 +138,37 @@ fn encode_to_compressed_uncompressed_size_matches_encoded_term() {
     // uncompressed size.
     let bare = encode_buf_ok(&term);
     assert_eq!(uncomp_size, bare.len() - 1);
+}
+
+#[test]
+fn encode_to_compressed_undersized_output() {
+    // The COMPRESSED header alone needs 6 bytes (magic, tag, size).
+    let term = Term::Int(42);
+    let mut intermediate = [0u8; 64];
+    let mut output = [0u8; 5];
+    let err = encode_to_compressed(&term, &mut intermediate, &mut output, None).unwrap_err();
+    assert!(matches!(err, EtfError::UnexpectedEof));
+}
+
+#[cfg(not(miri))]
+#[cfg(any(
+    all(feature = "zlib-rs", feature = "alloc"),
+    all(feature = "miniz_oxide", feature = "alloc"),
+    feature = "zlib",
+    feature = "zlib-default",
+    feature = "zlib-ng-compat",
+    feature = "zlib-ng",
+    feature = "cloudflare-zlib",
+))]
+#[test]
+fn encode_to_compressed_compress_failure() {
+    // An incompressible 256-byte payload cannot fit into the single
+    // byte left after the 6-byte COMPRESSED header: the backend must
+    // report CompressionFailed.
+    let bytes: Vec<u8> = (0u8..=255).collect();
+    let term = Term::Binary(&bytes);
+    let mut intermediate = [0u8; 512];
+    let mut output = [0u8; 7];
+    let err = encode_to_compressed(&term, &mut intermediate, &mut output, None).unwrap_err();
+    assert!(matches!(err, EtfError::CompressionFailed));
 }

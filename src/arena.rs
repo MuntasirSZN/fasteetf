@@ -97,3 +97,50 @@ impl<'a> Bump<'a> {
         unsafe { Ok(core::slice::from_raw_parts_mut(ptr as *mut T, len)) }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::mem::MaybeUninit;
+
+    // Stack arrays of `u8` have alignment 1, so the base pointer is not
+    // guaranteed to be max_align_t-aligned and the off-by-one trick below
+    // would not be deterministic.  Pin the alignment explicitly.
+    #[repr(align(16))]
+    struct Aligned([MaybeUninit<u8>; 64]);
+    #[repr(align(16))]
+    struct AlignedTiny([MaybeUninit<u8>; 16]);
+
+    #[test]
+    fn misaligned_buffer_is_rounded_up() {
+        // A buffer whose base pointer is not max_align_t-aligned forces the
+        // alignment fixup in `Bump::new` (offset by one byte here).
+        let mut buf = Aligned([MaybeUninit::uninit(); 64]);
+        let mis = &mut buf.0[1..];
+        let limits = Limits::default();
+        let mut bump = Bump::new(mis, &limits);
+        let s = bump.alloc_slice::<u64>(1).expect("alloc should succeed");
+        assert_eq!(s.as_ptr() as usize % core::mem::align_of::<u64>(), 0);
+    }
+
+    #[test]
+    fn exhausted_when_aligning_past_end() {
+        // A misaligned buffer too small to hold the alignment fixup plus any
+        // allocation hits the `addr >= end` exhaustion check.
+        let mut buf = AlignedTiny([MaybeUninit::uninit(); 16]);
+        let mis = &mut buf.0[1..];
+        let limits = Limits::default();
+        let mut bump = Bump::new(mis, &limits);
+        let err = bump.alloc_slice::<u64>(1).expect_err("alloc should fail");
+        assert!(matches!(err, EtfError::ArenaExhausted));
+    }
+
+    #[test]
+    fn exhausted_when_size_exceeds_remaining() {
+        let mut buf = [MaybeUninit::<u8>::uninit(); 16];
+        let limits = Limits::default();
+        let mut bump = Bump::new(&mut buf, &limits);
+        let err = bump.alloc_slice::<u8>(17).expect_err("alloc should fail");
+        assert!(matches!(err, EtfError::ArenaExhausted));
+    }
+}

@@ -343,3 +343,25 @@ impl VecEncoder {
         self.buf
     }
 }
+
+#[cfg(test)]
+#[cfg(feature = "alloc")]
+mod tests {
+    use super::*;
+    use crate::tags::LARGE_BIG_EXT;
+
+    /// `encode_small_big` upgrades to `LARGE_BIG_EXT` when the digit count
+    /// exceeds 255 — a defensive path `encode_term` cannot reach on its own
+    /// (it dispatches to `encode_large_big` directly).
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn small_big_upgrades_to_large_big() {
+        let mut enc = VecEncoder::with_capacity(512);
+        scalar::encode_small_big(&mut enc, 0, &[0xAB; 300]).unwrap();
+        let out = enc.into_vec();
+        assert_eq!(out[0], LARGE_BIG_EXT);
+        assert_eq!(out[1..5], [0, 0, 1, 44]); // 300 as BE u32
+        assert_eq!(out[5], 0); // sign
+        assert_eq!(&out[6..], &[0xAB; 300][..]);
+    }
+}

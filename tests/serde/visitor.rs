@@ -157,6 +157,96 @@ fn test_serde_ownedterm_visit_u32() {
 }
 
 #[test]
+fn test_serde_ownedterm_visit_u32_small() {
+    // A u32 that fits in i32 takes the Int fast path (the big-u32 path is
+    // covered by `test_serde_ownedterm_visit_u32`).
+    use fasteetf::owned::OwnedTerm;
+    struct U32SmallDeser(u32);
+    impl<'de> serde_core::Deserializer<'de> for U32SmallDeser {
+        type Error = serde_json::Error;
+        fn deserialize_any<V: serde_core::de::Visitor<'de>>(
+            self,
+            visitor: V,
+        ) -> Result<V::Value, Self::Error> {
+            visitor.visit_u32(self.0)
+        }
+        serde_core::forward_to_deserialize_any! {
+            bool i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 char str string
+            bytes byte_buf option unit unit_struct newtype_struct seq tuple
+            tuple_struct map struct enum identifier ignored_any
+        }
+    }
+    let term: OwnedTerm = serde_core::Deserialize::deserialize(U32SmallDeser(42)).unwrap();
+    assert!(matches!(term, OwnedTerm::Int(42)));
+}
+
+#[test]
+fn test_serde_ownedterm_expecting() {
+    // The OwnedTermVisitor's `expecting` message is surfaced when a
+    // deserializer drives a method the visitor does not implement.
+    // visit_enum is the one non-overridden method whose serde default
+    // errors immediately (visit_char, for example, forwards to visit_str).
+    use fasteetf::owned::OwnedTerm;
+    struct DummyVariantAccess;
+    impl<'de> serde_core::de::VariantAccess<'de> for DummyVariantAccess {
+        type Error = serde_json::Error;
+        fn unit_variant(self) -> Result<(), Self::Error> {
+            unreachable!("visit_enum default errors before touching the access")
+        }
+        fn newtype_variant_seed<T: serde_core::de::DeserializeSeed<'de>>(
+            self,
+            _: T,
+        ) -> Result<T::Value, Self::Error> {
+            unreachable!("visit_enum default errors before touching the access")
+        }
+        fn tuple_variant<V: serde_core::de::Visitor<'de>>(
+            self,
+            _: usize,
+            _: V,
+        ) -> Result<V::Value, Self::Error> {
+            unreachable!("visit_enum default errors before touching the access")
+        }
+        fn struct_variant<V: serde_core::de::Visitor<'de>>(
+            self,
+            _: &[&str],
+            _: V,
+        ) -> Result<V::Value, Self::Error> {
+            unreachable!("visit_enum default errors before touching the access")
+        }
+    }
+    struct DummyEnumAccess;
+    impl<'de> serde_core::de::EnumAccess<'de> for DummyEnumAccess {
+        type Error = serde_json::Error;
+        type Variant = DummyVariantAccess;
+        fn variant_seed<V: serde_core::de::DeserializeSeed<'de>>(
+            self,
+            _seed: V,
+        ) -> Result<(V::Value, Self::Variant), Self::Error> {
+            unreachable!("visit_enum default errors before touching the access")
+        }
+    }
+    struct EnumDeser;
+    impl<'de> serde_core::Deserializer<'de> for EnumDeser {
+        type Error = serde_json::Error;
+        fn deserialize_any<V: serde_core::de::Visitor<'de>>(
+            self,
+            visitor: V,
+        ) -> Result<V::Value, Self::Error> {
+            visitor.visit_enum(DummyEnumAccess)
+        }
+        serde_core::forward_to_deserialize_any! {
+            bool i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 char str string
+            bytes byte_buf option unit unit_struct newtype_struct seq tuple
+            tuple_struct map struct enum identifier ignored_any
+        }
+    }
+    let err: Result<OwnedTerm, _> = serde_core::Deserialize::deserialize(EnumDeser);
+    let err = err.expect_err("visit_enum should fail");
+    let msg = err.to_string();
+    assert!(msg.contains("Erlang"), "unexpected error message: {msg}");
+}
+
+#[test]
 fn test_serde_ownedterm_visit_f32() {
     use fasteetf::owned::OwnedTerm;
     struct F32Deser(f32);
