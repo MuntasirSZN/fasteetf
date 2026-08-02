@@ -418,6 +418,7 @@ mod cloudflare_zlib_impl {
 /// override the compile-time backend at runtime.
 pub type ZlibDecompressFn = fn(&mut [u8], &[u8]) -> Result<(), EtfError>;
 
+#[cfg(feature = "compression")]
 #[inline]
 pub(crate) fn decompress(
     target: &mut [u8],
@@ -442,6 +443,7 @@ pub(crate) fn decompress(
     feature = "cloudflare-zlib",
 ))]
 #[inline]
+#[allow(unreachable_code)]
 fn decompress_compile_time(target: &mut [u8], input: &[u8]) -> Result<(), EtfError> {
     // Compile-time selection.  The features are additive, so when more
     // than one `zlib-*` feature is enabled, the **last** one in source
@@ -492,8 +494,10 @@ fn decompress_compile_time(_target: &mut [u8], _input: &[u8]) -> Result<(), EtfE
 /// using the backend's `compress_bound` (zlib-rs: `compress_bound`).
 ///
 /// [`encode_to_compressed`]: crate::encode_to_compressed
+#[cfg(feature = "compression")]
 pub type ZlibCompressFn = fn(target: &mut [u8], input: &[u8]) -> Result<usize, EtfError>;
 
+#[cfg(feature = "compression")]
 #[inline]
 pub(crate) fn compress(
     target: &mut [u8],
@@ -517,6 +521,7 @@ pub(crate) fn compress(
     feature = "cloudflare-zlib",
 ))]
 #[inline]
+#[allow(unreachable_code)]
 fn compress_compile_time(target: &mut [u8], input: &[u8]) -> Result<usize, EtfError> {
     #[cfg(all(feature = "zlib-rs", feature = "alloc"))]
     return zlib_rs_impl::compress(target, input);

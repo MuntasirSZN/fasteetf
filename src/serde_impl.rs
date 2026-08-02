@@ -15,7 +15,7 @@ use serde_core::ser::{
 };
 
 use crate::types::owned::{OwnedTerm, RecordOwned};
-use crate::types::{AtomUtf8, Record, Term};
+use crate::types::{AtomUtf8, Term};
 
 // ═════════════════════════════════════════════════════════════════════════════
 //  Serialize
@@ -48,11 +48,13 @@ impl<'a> Serialize for Term<'a> {
                 }
                 seq.end()
             }
-            Term::ImproperList { elements, tail } => {
-                let mut s = serializer.serialize_struct("ImproperList", 2)?;
-                s.serialize_field("elements", elements)?;
-                s.serialize_field("tail", tail)?;
-                s.end()
+            Term::ImproperList(elements) => {
+                // ImproperList is a single slice where the last element is the tail
+                let mut seq = serializer.serialize_seq(Some(elements.len()))?;
+                for elem in elements.iter() {
+                    seq.serialize_element(elem)?;
+                }
+                seq.end()
             }
             Term::Tuple(elements) => {
                 let mut tup = serializer.serialize_tuple(elements.len())?;
@@ -68,31 +70,11 @@ impl<'a> Serialize for Term<'a> {
                 }
                 map.end()
             }
-            Term::Pid(p) => {
-                let mut s = serializer.serialize_struct("Pid", 2)?;
-                s.serialize_field("tag", &p.0)?;
-                s.serialize_field("data", p.1)?;
-                s.end()
-            }
-            Term::Port(p) => {
-                let mut s = serializer.serialize_struct("Port", 2)?;
-                s.serialize_field("tag", &p.0)?;
-                s.serialize_field("data", p.1)?;
-                s.end()
-            }
-            Term::Ref(r) => {
-                let mut s = serializer.serialize_struct("Ref", 2)?;
-                s.serialize_field("tag", &r.0)?;
-                s.serialize_field("data", r.1)?;
-                s.end()
-            }
-            Term::Function(f) => {
-                let mut s = serializer.serialize_struct("Function", 2)?;
-                s.serialize_field("tag", &f.0)?;
-                s.serialize_field("data", f.1)?;
-                s.end()
-            }
-            Term::Record(r) => serializer.serialize_bytes(r.0),
+            Term::Pid(p) => serializer.serialize_bytes(p),
+            Term::Port(p) => serializer.serialize_bytes(p),
+            Term::Ref(r) => serializer.serialize_bytes(r),
+            Term::Function(f) => serializer.serialize_bytes(f),
+            Term::Record(r) => serializer.serialize_bytes(r),
         }
     }
 }
@@ -149,30 +131,10 @@ impl Serialize for OwnedTerm {
                 }
                 map.end()
             }
-            OwnedTerm::Pid(p) => {
-                let mut s = serializer.serialize_struct("Pid", 2)?;
-                s.serialize_field("tag", &p.0)?;
-                s.serialize_field("data", &p.1)?;
-                s.end()
-            }
-            OwnedTerm::Port(p) => {
-                let mut s = serializer.serialize_struct("Port", 2)?;
-                s.serialize_field("tag", &p.0)?;
-                s.serialize_field("data", &p.1)?;
-                s.end()
-            }
-            OwnedTerm::Ref(r) => {
-                let mut s = serializer.serialize_struct("Ref", 2)?;
-                s.serialize_field("tag", &r.0)?;
-                s.serialize_field("data", &r.1)?;
-                s.end()
-            }
-            OwnedTerm::Function(f) => {
-                let mut s = serializer.serialize_struct("Function", 2)?;
-                s.serialize_field("tag", &f.0)?;
-                s.serialize_field("data", &f.1)?;
-                s.end()
-            }
+            OwnedTerm::Pid(p) => serializer.serialize_bytes(&p.0),
+            OwnedTerm::Port(p) => serializer.serialize_bytes(&p.0),
+            OwnedTerm::Ref(r) => serializer.serialize_bytes(&r.0),
+            OwnedTerm::Function(f) => serializer.serialize_bytes(&f.0),
             OwnedTerm::Record(r) => serializer.serialize_bytes(&r.0),
         }
     }
@@ -357,11 +319,9 @@ impl<'de> Visitor<'de> for OwnedTermVisitor {
 
 macro_rules! opaque_serde {
     ($name:ident, $owned:ident) => {
-        impl<'a> Serialize for $name<'a> {
-            fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-                serializer.serialize_bytes(self.0)
-            }
-        }
+        // Note: We don't implement Serialize for $name<'a> (which is &[u8])
+        // because that would violate the orphan rule. &[u8] already implements
+        // Serialize through serde's blanket impls.
 
         impl Serialize for $owned {
             fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -426,28 +386,14 @@ opaque_serde!(Record, RecordOwned);
 struct TaggedOpaqueVisitor;
 
 impl<'de> Visitor<'de> for TaggedOpaqueVisitor {
-    type Value = (u8, Vec<u8>);
+    type Value = Vec<u8>;
 
     fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("a struct with tag (u8) and data (byte array)")
+        f.write_str("byte array")
     }
 
-    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<(u8, Vec<u8>), A::Error> {
-        let mut tag: Option<u8> = None;
-        let mut data: Option<Vec<u8>> = None;
-        while let Some(key) = map.next_key::<String>()? {
-            match key.as_str() {
-                "tag" => tag = Some(map.next_value()?),
-                "data" => data = Some(map.next_value()?),
-                other => {
-                    let _ = map.next_value::<de::IgnoredAny>()?;
-                    return Err(de::Error::unknown_field(other, &["tag", "data"]));
-                }
-            }
-        }
-        let tag = tag.ok_or_else(|| de::Error::missing_field("tag"))?;
-        let data = data.ok_or_else(|| de::Error::missing_field("data"))?;
-        Ok((tag, data))
+    fn visit_bytes<E: de::Error>(self, v: &[u8]) -> Result<Vec<u8>, E> {
+        Ok(v.to_vec())
     }
 }
 
@@ -455,8 +401,8 @@ macro_rules! impl_tagged_deser {
     ($owned:ty) => {
         impl<'de> Deserialize<'de> for $owned {
             fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-                let (tag, data) = deserializer.deserialize_any(TaggedOpaqueVisitor)?;
-                Ok(Self(tag, data))
+                let bytes: Vec<u8> = deserializer.deserialize_bytes(TaggedOpaqueVisitor)?;
+                Ok(Self(bytes))
             }
         }
     };
@@ -466,79 +412,3 @@ impl_tagged_deser!(crate::types::owned::PidOwned);
 impl_tagged_deser!(crate::types::owned::PortOwned);
 impl_tagged_deser!(crate::types::owned::ReferenceOwned);
 impl_tagged_deser!(crate::types::owned::FunctionOwned);
-
-// Because the opaque_serde_tagged! macro defines Serialize, but
-// impl_tagged_deser! provides Deserialize separately, we need to
-// define Serialize impls explicitly:
-
-impl<'a> Serialize for crate::types::Pid<'a> {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut s = serializer.serialize_struct("Pid", 2)?;
-        s.serialize_field("tag", &self.0)?;
-        s.serialize_field("data", self.1)?;
-        s.end()
-    }
-}
-
-impl Serialize for crate::types::owned::PidOwned {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut s = serializer.serialize_struct("Pid", 2)?;
-        s.serialize_field("tag", &self.0)?;
-        s.serialize_field("data", &self.1)?;
-        s.end()
-    }
-}
-
-impl<'a> Serialize for crate::types::Port<'a> {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut s = serializer.serialize_struct("Port", 2)?;
-        s.serialize_field("tag", &self.0)?;
-        s.serialize_field("data", self.1)?;
-        s.end()
-    }
-}
-
-impl Serialize for crate::types::owned::PortOwned {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut s = serializer.serialize_struct("Port", 2)?;
-        s.serialize_field("tag", &self.0)?;
-        s.serialize_field("data", &self.1)?;
-        s.end()
-    }
-}
-
-impl<'a> Serialize for crate::types::Reference<'a> {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut s = serializer.serialize_struct("Ref", 2)?;
-        s.serialize_field("tag", &self.0)?;
-        s.serialize_field("data", self.1)?;
-        s.end()
-    }
-}
-
-impl Serialize for crate::types::owned::ReferenceOwned {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut s = serializer.serialize_struct("Ref", 2)?;
-        s.serialize_field("tag", &self.0)?;
-        s.serialize_field("data", &self.1)?;
-        s.end()
-    }
-}
-
-impl<'a> Serialize for crate::types::Function<'a> {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut s = serializer.serialize_struct("Function", 2)?;
-        s.serialize_field("tag", &self.0)?;
-        s.serialize_field("data", self.1)?;
-        s.end()
-    }
-}
-
-impl Serialize for crate::types::owned::FunctionOwned {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut s = serializer.serialize_struct("Function", 2)?;
-        s.serialize_field("tag", &self.0)?;
-        s.serialize_field("data", &self.1)?;
-        s.end()
-    }
-}

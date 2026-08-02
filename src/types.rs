@@ -112,8 +112,14 @@ pub enum Term<'a> {
 /// for equality (matching on known atoms like `'true'`, `'false'`,
 /// `'undefined'`), they can compare the raw bytes directly without the
 /// cost of UTF-8 validation.
-#[derive(Debug, Clone, Copy, Hash)]
+#[derive(Debug, Clone, Copy)]
 pub struct AtomUtf8<'a>(&'a [u8]);
+
+impl<'a> core::hash::Hash for AtomUtf8<'a> {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
 
 impl<'a> AtomUtf8<'a> {
     /// Create a new `AtomUtf8` without validating UTF-8.

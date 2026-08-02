@@ -33,7 +33,7 @@ lint:
 
 # Run clippy linter (per-feature with cargo-hack)
 lint-features:
-    cargo hack clippy --locked --optional-deps --each-feature -- -D warnings
+    cargo hack clippy --locked --optional-deps --each-feature --features compression -- -D warnings
 
 # Run clippy linter and autofix
 lint-fix:
