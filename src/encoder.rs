@@ -104,44 +104,6 @@ impl<'a> Sink for Encoder<'a> {
     }
 }
 
-/// A `Sink` that counts bytes without writing them.
-/// Used by `estimate_size` to compute the encoded size.
-#[cfg(feature = "alloc")]
-struct CountingSink(usize);
-
-#[cfg(feature = "alloc")]
-impl Sink for CountingSink {
-    #[inline(always)]
-    fn write_u8(&mut self, _v: u8) -> Result<(), EtfError> {
-        self.0 += 1;
-        Ok(())
-    }
-
-    #[inline(always)]
-    fn write_u16(&mut self, _v: u16) -> Result<(), EtfError> {
-        self.0 += 2;
-        Ok(())
-    }
-
-    #[inline(always)]
-    fn write_u32(&mut self, _v: u32) -> Result<(), EtfError> {
-        self.0 += 4;
-        Ok(())
-    }
-
-    #[inline(always)]
-    fn write_f64(&mut self, _v: f64) -> Result<(), EtfError> {
-        self.0 += 8;
-        Ok(())
-    }
-
-    #[inline(always)]
-    fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), EtfError> {
-        self.0 += bytes.len();
-        Ok(())
-    }
-}
-
 // ── Public API ─────────────────────────────────────────────────────────────
 
 /// Encode a [`Term`] into a pre-allocated buffer.
@@ -164,9 +126,11 @@ pub fn encode_to_buf(term: &Term<'_>, buf: &mut [u8]) -> Result<usize, EtfError>
 /// Requires the `alloc` feature (enabled by default).
 #[cfg(feature = "alloc")]
 pub fn encode_to_vec(term: &Term<'_>) -> Result<Vec<u8>, EtfError> {
-    // Use a small initial guess; the Vec grows dynamically if needed.
-    let cap = estimate_size(term);
-    let mut enc = VecEncoder::with_capacity(cap);
+    // Start with a small buffer (8 bytes for ETF magic + simple terms).
+    // The Vec will grow if needed, avoiding the double-walk of estimate_size.
+    // This is faster for small terms and only slightly slower for large terms
+    // (one potential reallocation vs always walking the tree twice).
+    let mut enc = VecEncoder::with_capacity(64);
     enc.write_u8(ETF_MAGIC)?;
     encode_term(&mut enc, term)?;
     Ok(enc.into_vec())
@@ -473,19 +437,6 @@ fn encode_bit_binary<S: Sink>(enc: &mut S, bits: u8, data: &[u8]) -> Result<(), 
 }
 
 // ── Opaque wrappers ────────────────────────────────────────────────────────
-
-/// Encode an opaque wrapper: write the tag byte followed by the raw bytes.
-
-/// Estimate the encoded size of a term (over-estimate is safe).
-///
-/// This is used by `encode_to_vec` to pick an initial buffer capacity.
-/// Over-estimating is fine; we truncate at the end.
-#[cfg(feature = "alloc")]
-fn estimate_size(term: &Term) -> usize {
-    let mut sink = CountingSink(0);
-    let _ = encode_term(&mut sink, term);
-    sink.0
-}
 
 // ── VecEncoder: a growable encoder for the fallback path ───────────────────
 

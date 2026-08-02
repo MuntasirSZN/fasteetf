@@ -156,8 +156,8 @@ pub fn parse_etf<'a>(options: ParseOptions<'a>) -> Result<Term<'a>, EtfError> {
     // Hot path: not compressed.
     if cursor.data.first() != Some(&tags::COMPRESSED) {
         let mut arena = arena::Bump::new(options.ast_arena, &options.limits);
-        let mut depth = options.limits.max_depth + 1;
-        return parser::parse_term(&mut cursor, &mut arena, &mut depth);
+        let depth = 0usize;
+        return parser::parse_term(&mut cursor, &mut arena, depth);
     }
 
     // Cold path: compression wrapper.
@@ -180,8 +180,8 @@ pub fn parse_etf<'a>(options: ParseOptions<'a>) -> Result<Term<'a>, EtfError> {
         zlib::decompress(target_buf, cursor.data, options.zlib_backend)?;
         let mut dec_cursor = cursor::Cursor::new(target_buf);
         let mut arena = arena::Bump::new(options.ast_arena, &options.limits);
-        let mut depth = options.limits.max_depth + 1;
-        parser::parse_term(&mut dec_cursor, &mut arena, &mut depth)
+        let depth = 0usize;
+        parser::parse_term(&mut dec_cursor, &mut arena, depth)
     }
 }
 
@@ -236,8 +236,8 @@ pub fn parse_etf_streaming<'a>(options: ParseOptions<'a>) -> Result<Term<'a>, Et
     // Hot path: not compressed.
     if cursor.data.first() != Some(&tags::COMPRESSED) {
         let mut arena = arena::Bump::new(options.ast_arena, &options.limits);
-        let mut depth = options.limits.max_depth + 1;
-        return parser::parse_term(&mut cursor, &mut arena, &mut depth);
+        let depth = 0usize;
+        return parser::parse_term(&mut cursor, &mut arena, depth);
     }
 
     // Cold path: compression wrapper.
@@ -260,7 +260,7 @@ pub fn parse_etf_streaming<'a>(options: ParseOptions<'a>) -> Result<Term<'a>, Et
         zlib::decompress(target_buf, cursor.data, options.zlib_backend)?;
         let mut dec_cursor = cursor::Cursor::new(target_buf);
         let mut arena = arena::Bump::new(options.ast_arena, &options.limits);
-        let mut depth = options.limits.max_depth + 1;
-        parser::parse_term(&mut dec_cursor, &mut arena, &mut depth)
+        let depth = 0usize;
+        parser::parse_term(&mut dec_cursor, &mut arena, depth)
     }
 }
