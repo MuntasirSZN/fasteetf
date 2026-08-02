@@ -236,8 +236,10 @@ pub trait Visitor {
 /// Resource limits are controlled by `limits`.
 pub fn parse_etf_with_visitor<'a, V: Visitor>(
     input: &'a [u8],
-    #[allow(unused_variables)] decompressed_buffer: Option<&'a mut [u8]>,
-    #[allow(unused_variables)] zlib_backend: Option<crate::ZlibDecompressFn>,
+    #[cfg(feature = "compression")] decompressed_buffer: Option<&'a mut [u8]>,
+    #[cfg(feature = "compression")] zlib_backend: Option<crate::ZlibDecompressFn>,
+    #[cfg(not(feature = "compression"))] _decompressed_buffer: Option<&'a mut [u8]>,
+    #[cfg(not(feature = "compression"))] _zlib_backend: Option<crate::ZlibDecompressFn>,
     visitor: &mut V,
     limits: &Limits,
 ) -> Result<(), V::Error> {
@@ -292,8 +294,10 @@ pub fn parse_etf_with_visitor<'a, V: Visitor>(
 /// Resource limits are controlled by `limits`.
 pub fn parse_etf_with_visitor_streaming<'a, V: Visitor>(
     input: &'a [u8],
-    #[allow(unused_variables)] decompressed_buffer: Option<&'a mut [u8]>,
-    #[allow(unused_variables)] zlib_backend: Option<crate::ZlibDecompressFn>,
+    #[cfg(feature = "compression")] decompressed_buffer: Option<&'a mut [u8]>,
+    #[cfg(feature = "compression")] zlib_backend: Option<crate::ZlibDecompressFn>,
+    #[cfg(not(feature = "compression"))] _decompressed_buffer: Option<&'a mut [u8]>,
+    #[cfg(not(feature = "compression"))] _zlib_backend: Option<crate::ZlibDecompressFn>,
     visitor: &mut V,
     limits: &Limits,
 ) -> Result<(), V::Error> {

@@ -307,7 +307,7 @@ fn parse_string<'a>(
     }
     let bytes = cursor.take(len)?;
 
-    // A1: Opt-in compact STRING_EXT representation
+    // STRING_EXT: opt-in compact representation (see Limits::expand_string_ext_to_list)
     if arena.limits().expand_string_ext_to_list {
         // Legacy behavior: expand to List of Ints (default, backward compatible)
         let elements = arena.alloc_slice(len)?;

@@ -112,35 +112,30 @@ struct CountingSink(usize);
 #[cfg(feature = "alloc")]
 impl Sink for CountingSink {
     #[inline(always)]
-    #[allow(unused_variables)]
-    fn write_u8(&mut self, v: u8) -> Result<(), EtfError> {
+    fn write_u8(&mut self, _v: u8) -> Result<(), EtfError> {
         self.0 += 1;
         Ok(())
     }
 
     #[inline(always)]
-    #[allow(unused_variables)]
-    fn write_u16(&mut self, v: u16) -> Result<(), EtfError> {
+    fn write_u16(&mut self, _v: u16) -> Result<(), EtfError> {
         self.0 += 2;
         Ok(())
     }
 
     #[inline(always)]
-    #[allow(unused_variables)]
-    fn write_u32(&mut self, v: u32) -> Result<(), EtfError> {
+    fn write_u32(&mut self, _v: u32) -> Result<(), EtfError> {
         self.0 += 4;
         Ok(())
     }
 
     #[inline(always)]
-    #[allow(unused_variables)]
-    fn write_f64(&mut self, v: f64) -> Result<(), EtfError> {
+    fn write_f64(&mut self, _v: f64) -> Result<(), EtfError> {
         self.0 += 8;
         Ok(())
     }
 
     #[inline(always)]
-    #[allow(unused_variables)]
     fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), EtfError> {
         self.0 += bytes.len();
         Ok(())
@@ -480,12 +475,6 @@ fn encode_bit_binary<S: Sink>(enc: &mut S, bits: u8, data: &[u8]) -> Result<(), 
 // ── Opaque wrappers ────────────────────────────────────────────────────────
 
 /// Encode an opaque wrapper: write the tag byte followed by the raw bytes.
-fn encode_opaque<S: Sink>(enc: &mut S, tag: u8, data: &[u8]) -> Result<(), EtfError> {
-    enc.write_u8(tag)?;
-    enc.write_bytes(data)
-}
-
-// ── Size estimation (allows single-pass Vec allocation) ────────────────────
 
 /// Estimate the encoded size of a term (over-estimate is safe).
 ///

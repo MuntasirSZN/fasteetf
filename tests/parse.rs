@@ -740,7 +740,7 @@ fn test_atom_utf8_lossy_string_conversion() {
 
 #[test]
 fn test_term_size() {
-    // A3: Term should be 24 bytes (was 32 bytes before A3)
+    // Verify Term size is 24 bytes (optimized from 32 bytes)
     // This test verifies the size optimization
     let size = std::mem::size_of::<fasteetf::Term>();
     println!("Term size: {} bytes", size);

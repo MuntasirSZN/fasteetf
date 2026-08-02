@@ -5,10 +5,10 @@ tools := "cargo-nextest cargo-deny cargo-llvm-cov cargo-hack"
 # Commands
 
 format := "cargo fmt --all"
-clippy := "cargo clippy --all-targets"
-coverage := "cargo llvm-cov --workspace"
-build := "cargo build --locked"
-nextest := "cargo hack nextest run --no-tests=pass --locked --optional-deps --each-feature"
+clippy := "cargo clippy --all-targets --all-features"
+coverage := "cargo llvm-cov --all-features --workspace"
+build := "cargo build --all-features --locked"
+nextest := "cargo hack nextest run --locked --optional-deps --each-feature"
 
 # Default recipe (shows help)
 _default:
@@ -17,7 +17,7 @@ _default:
 # Run miri
 miri:
     rustup component add --toolchain=nightly miri
-    rustup run nightly -- cargo miri nextest run
+    rustup run nightly -- cargo miri nextest run --all-features
 
 # Format code with rustfmt
 fmt:
@@ -72,7 +72,7 @@ doc:
 docs-ci:
     cargo doc --no-deps --no-default-features --locked
     cargo doc --no-deps --locked
-    cargo doc --no-deps --locked
+    cargo doc --no-deps --all-features --locked
 
 # Run all checks (format, lint, test)
 check: fmt-check lint test
@@ -107,8 +107,8 @@ coverage:
 
 # Generate coverage report (CI variant: nextest + doctest + lcov)
 coverage-ci:
-    cargo llvm-cov --no-report nextest
-    cargo llvm-cov --no-report --doc
+    cargo llvm-cov --all-features --no-report nextest
+    cargo llvm-cov --all-features --no-report --doc
     cargo llvm-cov report --doctests --lcov --output-path lcov.info
 
 # Generate HTML coverage report and open in browser

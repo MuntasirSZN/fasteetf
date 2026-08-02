@@ -97,25 +97,4 @@ impl<'a> Bump<'a> {
         unsafe { Ok(core::slice::from_raw_parts_mut(ptr as *mut T, len)) }
     }
 
-    /// Allocate space for a single `Term` and return a mutable reference to it.
-    #[inline(always)]
-    pub(crate) fn alloc_term(&mut self) -> Result<&'a mut crate::types::Term<'a>, EtfError> {
-        let size = core::mem::size_of::<crate::types::Term<'a>>();
-
-        // SAFETY: The arena is created with `Bump::new` which aligns the
-        // initial pointer to `max_align_t` (typically 16 bytes). Since
-        // `Term`'s alignment is ≤ 16 bytes (it contains 8-byte references
-        // and f64), the current pointer is guaranteed to be properly aligned.
-        // We only need to check that the allocation fits within the buffer.
-        let end = (self.ptr as usize).saturating_add(size);
-        if end > (self.end as usize) {
-            return Err(EtfError::ArenaExhausted);
-        }
-
-        unsafe {
-            let term_ptr = self.ptr as *mut crate::types::Term<'a>;
-            self.ptr = self.ptr.add(size);
-            Ok(&mut *term_ptr)
-        }
-    }
 }

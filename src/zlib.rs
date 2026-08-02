@@ -50,36 +50,6 @@
 // only one backend.
 // ──────────────────────────────────────────────────────────────────────────
 
-// B22: Warn if multiple zlib backends are enabled
-#[cfg(all(
-    feature = "zlib-rs",
-    any(
-        feature = "miniz_oxide",
-        feature = "zlib",
-        feature = "zlib-default",
-        feature = "zlib-ng-compat",
-        feature = "zlib-ng",
-        feature = "cloudflare-zlib"
-    )
-))]
-compile_error!(
-    "Multiple zlib backends enabled. Enable only one: zlib-rs, miniz_oxide, zlib, zlib-default, zlib-ng-compat, zlib-ng, or cloudflare-zlib."
-);
-
-#[cfg(all(
-    feature = "miniz_oxide",
-    any(
-        feature = "zlib",
-        feature = "zlib-default",
-        feature = "zlib-ng-compat",
-        feature = "zlib-ng",
-        feature = "cloudflare-zlib"
-    )
-))]
-compile_error!(
-    "Multiple zlib backends enabled. Enable only one: zlib-rs, miniz_oxide, zlib, zlib-default, zlib-ng-compat, zlib-ng, or cloudflare-zlib."
-);
-
 use crate::error::EtfError;
 
 /// A zlib decompression backend.
@@ -449,7 +419,6 @@ mod cloudflare_zlib_impl {
 pub type ZlibDecompressFn = fn(&mut [u8], &[u8]) -> Result<(), EtfError>;
 
 #[inline]
-#[allow(dead_code, unused_assignments)] // unused when no `zlib-*` feature is enabled
 pub(crate) fn decompress(
     target: &mut [u8],
     input: &[u8],
@@ -460,47 +429,53 @@ pub(crate) fn decompress(
         return backend(target, input);
     }
 
+    decompress_compile_time(target, input)
+}
+
+#[cfg(any(
+    feature = "zlib-rs",
+    feature = "miniz_oxide",
+    feature = "zlib",
+    feature = "zlib-default",
+    feature = "zlib-ng-compat",
+    feature = "zlib-ng",
+    feature = "cloudflare-zlib",
+))]
+#[inline]
+fn decompress_compile_time(target: &mut [u8], input: &[u8]) -> Result<(), EtfError> {
     // Compile-time selection.  The features are additive, so when more
     // than one `zlib-*` feature is enabled, the **last** one in source
     // order wins.  This mirrors `flate2`'s dispatch.
     //
     // The order below matches the priority list in the module doc.
     #[cfg(feature = "zlib-rs")]
-    #[allow(unused_variables)]
-    let result = zlib_rs_impl::decompress(target, input);
+    return zlib_rs_impl::decompress(target, input);
 
     #[cfg(feature = "miniz_oxide")]
-    #[allow(unused_variables)]
-    let result = miniz_oxide_impl::decompress(target, input);
+    return miniz_oxide_impl::decompress(target, input);
 
     #[cfg(any(feature = "zlib", feature = "zlib-default", feature = "zlib-ng-compat"))]
-    #[allow(unused_variables)]
-    let result = libz_sys_impl::decompress(target, input);
+    return libz_sys_impl::decompress(target, input);
 
     #[cfg(feature = "zlib-ng")]
-    #[allow(unused_variables)]
-    let result = libz_ng_sys_impl::decompress(target, input);
+    return libz_ng_sys_impl::decompress(target, input);
 
     #[cfg(feature = "cloudflare-zlib")]
-    #[allow(unused_variables)]
-    let result = cloudflare_zlib_impl::decompress(target, input);
+    return cloudflare_zlib_impl::decompress(target, input);
+}
 
-    // Fall-through: no `zlib-*` feature was enabled.  The COMPRESSED
-    // wrapper is reported as unsupported so callers can distinguish
-    // "no backend" from "backend failed on bad data".
-    #[cfg(not(any(
-        feature = "zlib-rs",
-        feature = "miniz_oxide",
-        feature = "zlib",
-        feature = "zlib-default",
-        feature = "zlib-ng-compat",
-        feature = "zlib-ng",
-        feature = "cloudflare-zlib",
-    )))]
-    #[allow(unused_variables)]
-    let result = Err(EtfError::UnsupportedTag(crate::tags::COMPRESSED));
-
-    result
+#[cfg(not(any(
+    feature = "zlib-rs",
+    feature = "miniz_oxide",
+    feature = "zlib",
+    feature = "zlib-default",
+    feature = "zlib-ng-compat",
+    feature = "zlib-ng",
+    feature = "cloudflare-zlib",
+)))]
+#[inline]
+fn decompress_compile_time(_target: &mut [u8], _input: &[u8]) -> Result<(), EtfError> {
+    Err(EtfError::UnsupportedTag(crate::tags::COMPRESSED))
 }
 
 /// Function pointer type for user-supplied zlib **compression** backends.
@@ -519,15 +494,7 @@ pub(crate) fn decompress(
 /// [`encode_to_compressed`]: crate::encode_to_compressed
 pub type ZlibCompressFn = fn(target: &mut [u8], input: &[u8]) -> Result<usize, EtfError>;
 
-/// Compile-time / runtime zlib compression dispatch.
-///
-/// `runtime`, if `Some`, is always used.  If `None`, the compile-time
-/// selected backend (via `zlib-*` features) is used.  If no backend is
-/// available at all, returns [`EtfError::CompressionFailed`] so the
-/// caller can distinguish "compression requested but no backend" from
-/// "backend failed on bad data".
 #[inline]
-#[allow(dead_code, unused_assignments)] // unused when no `zlib-*` feature is enabled
 pub(crate) fn compress(
     target: &mut [u8],
     input: &[u8],
@@ -537,43 +504,46 @@ pub(crate) fn compress(
         return backend(target, input);
     }
 
-    // Pure-Rust backends need an allocator for their internal state, so
-    // their `compress` impl is itself `#[cfg(feature = "alloc")]`.  The
-    // C-based backends are unconditional.
+    compress_compile_time(target, input)
+}
+
+#[cfg(any(
+    all(feature = "zlib-rs", feature = "alloc"),
+    all(feature = "miniz_oxide", feature = "alloc"),
+    feature = "zlib",
+    feature = "zlib-default",
+    feature = "zlib-ng-compat",
+    feature = "zlib-ng",
+    feature = "cloudflare-zlib",
+))]
+#[inline]
+fn compress_compile_time(target: &mut [u8], input: &[u8]) -> Result<usize, EtfError> {
     #[cfg(all(feature = "zlib-rs", feature = "alloc"))]
-    #[allow(unused_variables)]
-    let result = zlib_rs_impl::compress(target, input);
+    return zlib_rs_impl::compress(target, input);
 
     #[cfg(all(feature = "miniz_oxide", feature = "alloc"))]
-    #[allow(unused_variables)]
-    let result = miniz_oxide_impl::compress(target, input);
+    return miniz_oxide_impl::compress(target, input);
 
     #[cfg(any(feature = "zlib", feature = "zlib-default", feature = "zlib-ng-compat"))]
-    #[allow(unused_variables)]
-    let result = libz_sys_impl::compress(target, input);
+    return libz_sys_impl::compress(target, input);
 
     #[cfg(feature = "zlib-ng")]
-    #[allow(unused_variables)]
-    let result = libz_ng_sys_impl::compress(target, input);
+    return libz_ng_sys_impl::compress(target, input);
 
     #[cfg(feature = "cloudflare-zlib")]
-    #[allow(unused_variables)]
-    let result = cloudflare_zlib_impl::compress(target, input);
+    return cloudflare_zlib_impl::compress(target, input);
+}
 
-    // Fall-through: no `zlib-*` feature is enabled, or the only enabled
-    // backends are pure-Rust and our `alloc` is off (so they have no
-    // allocator configured).
-    #[cfg(not(any(
-        all(feature = "zlib-rs", feature = "alloc"),
-        all(feature = "miniz_oxide", feature = "alloc"),
-        feature = "zlib",
-        feature = "zlib-default",
-        feature = "zlib-ng-compat",
-        feature = "zlib-ng",
-        feature = "cloudflare-zlib",
-    )))]
-    #[allow(unused_variables)]
-    let result: Result<usize, EtfError> = Err(EtfError::CompressionFailed);
-
-    result
+#[cfg(not(any(
+    all(feature = "zlib-rs", feature = "alloc"),
+    all(feature = "miniz_oxide", feature = "alloc"),
+    feature = "zlib",
+    feature = "zlib-default",
+    feature = "zlib-ng-compat",
+    feature = "zlib-ng",
+    feature = "cloudflare-zlib",
+)))]
+#[inline]
+fn compress_compile_time(_target: &mut [u8], _input: &[u8]) -> Result<usize, EtfError> {
+    Err(EtfError::CompressionFailed)
 }
