@@ -395,6 +395,18 @@ impl<'de> Visitor<'de> for TaggedOpaqueVisitor {
     fn visit_bytes<E: de::Error>(self, v: &[u8]) -> Result<Vec<u8>, E> {
         Ok(v.to_vec())
     }
+
+    fn visit_byte_buf<E: de::Error>(self, v: Vec<u8>) -> Result<Vec<u8>, E> {
+        Ok(v)
+    }
+
+    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Vec<u8>, A::Error> {
+        let mut bytes = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+        while let Some(b) = seq.next_element::<u8>()? {
+            bytes.push(b);
+        }
+        Ok(bytes)
+    }
 }
 
 macro_rules! impl_tagged_deser {

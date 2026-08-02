@@ -347,8 +347,7 @@ fn test_serde_owned_serialize_port() {
     use fasteetf::owned::{OwnedTerm, PortOwned};
     let term = OwnedTerm::Port(PortOwned(vec![4, 5, 6]));
     let json = serde_json::to_string(&term).unwrap();
-    assert!(json.contains("\"tag\":102"));
-    assert!(json.contains("\"data\":[4,5,6]"));
+    assert_eq!(json, "[4,5,6]");
 }
 
 #[test]
@@ -356,8 +355,7 @@ fn test_serde_owned_serialize_ref() {
     use fasteetf::owned::{OwnedTerm, ReferenceOwned};
     let term = OwnedTerm::Ref(ReferenceOwned(vec![7, 8, 9]));
     let json = serde_json::to_string(&term).unwrap();
-    assert!(json.contains("\"tag\":114"));
-    assert!(json.contains("\"data\":[7,8,9]"));
+    assert_eq!(json, "[7,8,9]");
 }
 
 #[test]
@@ -365,8 +363,7 @@ fn test_serde_owned_serialize_function() {
     use fasteetf::owned::{FunctionOwned, OwnedTerm};
     let term = OwnedTerm::Function(FunctionOwned(vec![10, 11]));
     let json = serde_json::to_string(&term).unwrap();
-    assert!(json.contains("\"tag\":113"));
-    assert!(json.contains("\"data\":[10,11]"));
+    assert_eq!(json, "[10,11]");
 }
 
 #[test]
@@ -430,9 +427,7 @@ fn test_serde_deserialize_u32_overflow() {
     let term: OwnedTerm = serde_json::from_str(&json).unwrap();
     match term {
         OwnedTerm::SmallBigInt { sign: 0, digits } => {
-            // u32::MAX = 0xFFFFFFFF, padded to 8 bytes (u64 width). serde_json
-            // calls visit_u64 so the digit buffer is the full 8-byte LE repr.
-            assert_eq!(digits, vec![0xFF, 0xFF, 0xFF, 0xFF, 0, 0, 0, 0]);
+            assert_eq!(digits, vec![0xFF, 0xFF, 0xFF, 0xFF]);
         }
         other => panic!("expected SmallBigInt, got {other:?}"),
     }
@@ -620,7 +615,7 @@ fn test_serde_record_owned_from_seq() {
 #[test]
 fn test_serde_pid_owned_missing_field() {
     use fasteetf::owned::PidOwned;
-    let err = serde_json::from_str::<PidOwned>("\"not-bytes\"").unwrap_err();
+    let err = serde_json::from_str::<PidOwned>("{\"data\":[1,2,3]}").unwrap_err();
     assert!(format!("{err}").contains("invalid"));
 }
 
@@ -1291,14 +1286,11 @@ fn test_serde_untagged_opaque_expect_error() {
 #[test]
 fn test_serde_tagged_opaque_expect_error() {
     use fasteetf::owned::PidOwned;
-    // Trigger expecting() on the TaggedOpaqueVisitor by feeding JSON with an
-    // empty map (missing "tag" and "data" fields).  The visitor's
-    // visit_map loop will hit `Err(de::Error::missing_field("tag"))`, which
-    // internally calls `expecting()` to format the error.
+    // Trigger expecting() on TaggedOpaqueVisitor by feeding JSON with a map,
+    // while the visitor only accepts byte strings and byte sequences.
     let result: Result<PidOwned, _> = serde_json::from_str("{}");
     assert!(result.is_err());
     let err = result.unwrap_err();
     let msg = format!("{err}");
-    // The error message should mention "tag" since that's the missing field.
-    assert!(msg.contains("tag") || msg.contains("missing"));
+    assert!(msg.contains("byte") || msg.contains("invalid type"));
 }
