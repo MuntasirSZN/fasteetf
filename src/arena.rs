@@ -96,5 +96,4 @@ impl<'a> Bump<'a> {
 
         unsafe { Ok(core::slice::from_raw_parts_mut(ptr as *mut T, len)) }
     }
-
 }

@@ -112,7 +112,7 @@ pub enum Term<'a> {
 /// for equality (matching on known atoms like `'true'`, `'false'`,
 /// `'undefined'`), they can compare the raw bytes directly without the
 /// cost of UTF-8 validation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Hash)]
 pub struct AtomUtf8<'a>(&'a [u8]);
 
 impl<'a> AtomUtf8<'a> {
@@ -154,19 +154,31 @@ impl<'a> AtomUtf8<'a> {
 
 // ── PartialEq / Eq helpers so callers can match `Atom("true")` etc. ─────────
 
+use crate::simd::simd_eq;
+
 impl<'a> PartialEq<&str> for AtomUtf8<'a> {
     #[inline(always)]
     fn eq(&self, other: &&str) -> bool {
-        self.0 == other.as_bytes()
+        simd_eq(self.0, other.as_bytes())
     }
 }
 
 impl<'a> PartialEq<AtomUtf8<'a>> for &str {
     #[inline(always)]
     fn eq(&self, other: &AtomUtf8<'a>) -> bool {
-        self.as_bytes() == other.0
+        simd_eq(self.as_bytes(), other.0)
     }
 }
+
+// Manual PartialEq for AtomUtf8 vs AtomUtf8 to use SIMD
+impl<'a> PartialEq for AtomUtf8<'a> {
+    #[inline(always)]
+    fn eq(&self, other: &Self) -> bool {
+        simd_eq(self.0, other.0)
+    }
+}
+
+impl<'a> Eq for AtomUtf8<'a> {}
 
 impl<'a> From<&'a str> for AtomUtf8<'a> {
     #[inline(always)]

@@ -99,7 +99,11 @@ impl<'a> Sink for Encoder<'a> {
 
     #[inline(always)]
     fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), EtfError> {
-        self.reserve(bytes.len())?.copy_from_slice(bytes);
+        let dst = self.reserve(bytes.len())?;
+
+        unsafe {
+            crate::simd::simd_copy(dst.as_mut_ptr(), bytes.as_ptr(), bytes.len());
+        }
         Ok(())
     }
 }

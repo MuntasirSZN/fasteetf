@@ -141,6 +141,7 @@ cloudflare-zlib = ["dep:cloudflare-zlib-sys"]
 [dependencies]
 serde_core = { version = "1", default-features = false, optional = true }
 thiserror = { version = "2", default-features = false }
+cpufeatures = "0.3"  # Runtime CPU feature detection for SIMD
 
 # Built-in zlib backends.  Selecting more than one is allowed; see
 # `src/zlib.rs` for the dispatch priority.  None of these backends
