@@ -10,7 +10,6 @@ use crate::types::{AtomUtf8, Term};
 pub(crate) fn parse_atom_utf8<'a>(
     cursor: &mut Cursor<'a>,
     arena: &mut Bump<'a>,
-    _depth: usize,
 ) -> Result<Term<'a>, EtfError> {
     let len = cursor.read_u16()? as usize;
     if len > arena.limits().max_atom_len {
@@ -56,7 +55,6 @@ pub(crate) fn parse_atom_only<'a>(
 pub(crate) fn parse_small_atom_utf8<'a>(
     cursor: &mut Cursor<'a>,
     arena: &mut Bump<'a>,
-    _depth: usize,
 ) -> Result<Term<'a>, EtfError> {
     let len = cursor.read_u8()? as usize;
     if len > arena.limits().max_atom_len {

@@ -9,7 +9,6 @@ use crate::types::Term;
 pub(crate) fn parse_small_big<'a>(
     cursor: &mut Cursor<'a>,
     arena: &mut Bump<'a>,
-    _depth: usize,
 ) -> Result<Term<'a>, EtfError> {
     let len = cursor.read_u8()? as usize;
     if len > arena.limits().max_bignum_size {
@@ -24,7 +23,6 @@ pub(crate) fn parse_small_big<'a>(
 pub(crate) fn parse_large_big<'a>(
     cursor: &mut Cursor<'a>,
     arena: &mut Bump<'a>,
-    _depth: usize,
 ) -> Result<Term<'a>, EtfError> {
     let len = cursor.read_u32()? as usize;
     if len > arena.limits().max_bignum_size {
@@ -41,7 +39,6 @@ pub(crate) fn parse_large_big<'a>(
 pub(crate) fn parse_legacy_float<'a>(
     cursor: &mut Cursor<'a>,
     _arena: &mut Bump<'a>,
-    _depth: usize,
 ) -> Result<Term<'a>, EtfError> {
     let bytes = cursor.take(31)?;
     let end = bytes.iter().position(|&b| b == 0).unwrap_or(31);
