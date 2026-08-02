@@ -13,9 +13,13 @@ fn test_streaming_incomplete() {
     let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
     let err = fasteetf::parse_etf_streaming(fasteetf::ParseOptions {
         input: b"\x83",
+
+        #[cfg(feature = "compression")]
         decompressed_buffer: None,
         ast_arena: &mut arena,
         limits: Limits::default(),
+
+        #[cfg(feature = "compression")]
         zlib_backend: None,
     })
     .unwrap_err();
@@ -28,9 +32,13 @@ fn test_streaming_incomplete_tag() {
     let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
     let err = fasteetf::parse_etf_streaming(fasteetf::ParseOptions {
         input: b"\x83",
+
+        #[cfg(feature = "compression")]
         decompressed_buffer: None,
         ast_arena: &mut arena,
         limits: fasteetf::Limits::default(),
+
+        #[cfg(feature = "compression")]
         zlib_backend: None,
     })
     .unwrap_err();
@@ -48,9 +56,13 @@ fn test_streaming_full_parse() {
     let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
     let term = fasteetf::parse_etf_streaming(fasteetf::ParseOptions {
         input: b"\x83\x61\x2a",
+
+        #[cfg(feature = "compression")]
         decompressed_buffer: None,
         ast_arena: &mut arena,
         limits: fasteetf::Limits::default(),
+
+        #[cfg(feature = "compression")]
         zlib_backend: None,
     })
     .unwrap();
@@ -68,9 +80,13 @@ fn test_streaming_accumulate() {
         if split < full.len() {
             let err = fasteetf::parse_etf_streaming(fasteetf::ParseOptions {
                 input: chunk,
+
+                #[cfg(feature = "compression")]
                 decompressed_buffer: None,
                 ast_arena: &mut arena,
                 limits: fasteetf::Limits::default(),
+
+                #[cfg(feature = "compression")]
                 zlib_backend: None,
             })
             .unwrap_err();
@@ -83,9 +99,13 @@ fn test_streaming_accumulate() {
         let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
         let term = fasteetf::parse_etf_streaming(fasteetf::ParseOptions {
             input: full,
+
+            #[cfg(feature = "compression")]
             decompressed_buffer: None,
             limits: fasteetf::Limits::default(),
             ast_arena: &mut arena,
+
+            #[cfg(feature = "compression")]
             zlib_backend: None,
         })
         .unwrap();
@@ -102,9 +122,13 @@ fn test_streaming_needed_size() {
     let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
     let err = fasteetf::parse_etf_streaming(fasteetf::ParseOptions {
         input: b"\x83",
+
+        #[cfg(feature = "compression")]
         decompressed_buffer: None,
         ast_arena: &mut arena,
         limits: fasteetf::Limits::default(),
+
+        #[cfg(feature = "compression")]
         zlib_backend: None,
     })
     .unwrap_err();
@@ -167,9 +191,13 @@ fn test_streaming_truncated_after_magic() {
     let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
     let err = fasteetf::parse_etf_streaming(fasteetf::ParseOptions {
         input: b"\x83",
+
+        #[cfg(feature = "compression")]
         decompressed_buffer: None,
         ast_arena: &mut arena,
         limits: fasteetf::Limits::default(),
+
+        #[cfg(feature = "compression")]
         zlib_backend: None,
     })
     .unwrap_err();
@@ -182,9 +210,13 @@ fn test_streaming_truncated_in_integer_ext() {
     let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
     let err = fasteetf::parse_etf_streaming(fasteetf::ParseOptions {
         input: b"\x83\x62\x00\x01",
+
+        #[cfg(feature = "compression")]
         decompressed_buffer: None,
         ast_arena: &mut arena,
         limits: fasteetf::Limits::default(),
+
+        #[cfg(feature = "compression")]
         zlib_backend: None,
     })
     .unwrap_err();
@@ -197,9 +229,13 @@ fn test_streaming_truncated_in_float() {
     let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
     let err = fasteetf::parse_etf_streaming(fasteetf::ParseOptions {
         input: b"\x83\x46\x00\x01\x02\x03",
+
+        #[cfg(feature = "compression")]
         decompressed_buffer: None,
         ast_arena: &mut arena,
         limits: fasteetf::Limits::default(),
+
+        #[cfg(feature = "compression")]
         zlib_backend: None,
     })
     .unwrap_err();
@@ -212,9 +248,13 @@ fn test_streaming_truncated_in_atom() {
     let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
     let err = fasteetf::parse_etf_streaming(fasteetf::ParseOptions {
         input: b"\x83\x76\x00\x05he",
+
+        #[cfg(feature = "compression")]
         decompressed_buffer: None,
         ast_arena: &mut arena,
         limits: fasteetf::Limits::default(),
+
+        #[cfg(feature = "compression")]
         zlib_backend: None,
     })
     .unwrap_err();
@@ -227,9 +267,13 @@ fn test_streaming_truncated_in_binary() {
     let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
     let err = fasteetf::parse_etf_streaming(fasteetf::ParseOptions {
         input: b"\x83\x6d\x00\x00\x00\x05\xab\xcd",
+
+        #[cfg(feature = "compression")]
         decompressed_buffer: None,
         ast_arena: &mut arena,
         limits: fasteetf::Limits::default(),
+
+        #[cfg(feature = "compression")]
         zlib_backend: None,
     })
     .unwrap_err();
@@ -242,9 +286,13 @@ fn test_streaming_truncated_in_tuple() {
     let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
     let err = fasteetf::parse_etf_streaming(fasteetf::ParseOptions {
         input: b"\x83\x68\x02\x61\x01",
+
+        #[cfg(feature = "compression")]
         decompressed_buffer: None,
         ast_arena: &mut arena,
         limits: fasteetf::Limits::default(),
+
+        #[cfg(feature = "compression")]
         zlib_backend: None,
     })
     .unwrap_err();
@@ -257,9 +305,13 @@ fn test_streaming_truncated_in_list_tail() {
     let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
     let err = fasteetf::parse_etf_streaming(fasteetf::ParseOptions {
         input: b"\x83\x6c\x00\x00\x00\x01\x61\x01",
+
+        #[cfg(feature = "compression")]
         decompressed_buffer: None,
         ast_arena: &mut arena,
         limits: fasteetf::Limits::default(),
+
+        #[cfg(feature = "compression")]
         zlib_backend: None,
     })
     .unwrap_err();
@@ -272,9 +324,13 @@ fn test_streaming_truncated_in_pid() {
     let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
     let err = fasteetf::parse_etf_streaming(fasteetf::ParseOptions {
         input: b"\x83\x67\x77\x04node\x00\x00\x00\x01",
+
+        #[cfg(feature = "compression")]
         decompressed_buffer: None,
         ast_arena: &mut arena,
         limits: fasteetf::Limits::default(),
+
+        #[cfg(feature = "compression")]
         zlib_backend: None,
     })
     .unwrap_err();
@@ -288,9 +344,13 @@ fn test_streaming_invalid_magic_returns_error() {
     let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
     let err = fasteetf::parse_etf_streaming(fasteetf::ParseOptions {
         input: b"\x00",
+
+        #[cfg(feature = "compression")]
         decompressed_buffer: None,
         ast_arena: &mut arena,
         limits: fasteetf::Limits::default(),
+
+        #[cfg(feature = "compression")]
         zlib_backend: None,
     })
     .unwrap_err();
@@ -343,9 +403,13 @@ fn test_streaming_compressed_no_buffer() {
     let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
     let err = fasteetf::parse_etf_streaming(fasteetf::ParseOptions {
         input: b"\x83\x50\x00\x00\x00\x05\x78\x9c\x00\x00\x00\x00\x01",
+
+        #[cfg(feature = "compression")]
         decompressed_buffer: None,
         ast_arena: &mut arena,
         limits: fasteetf::Limits::default(),
+
+        #[cfg(feature = "compression")]
         zlib_backend: None,
     });
     // Either an error or a successful parse depending on what the runtime does;
@@ -359,9 +423,13 @@ fn test_streaming_truncated_in_atom_utf8_length() {
     let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
     let err = fasteetf::parse_etf_streaming(fasteetf::ParseOptions {
         input: b"\x83\x76\x00",
+
+        #[cfg(feature = "compression")]
         decompressed_buffer: None,
         ast_arena: &mut arena,
         limits: fasteetf::Limits::default(),
+
+        #[cfg(feature = "compression")]
         zlib_backend: None,
     })
     .unwrap_err();
@@ -374,9 +442,13 @@ fn test_streaming_truncated_in_string_ext_length() {
     let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
     let err = fasteetf::parse_etf_streaming(fasteetf::ParseOptions {
         input: b"\x83\x6b\x00",
+
+        #[cfg(feature = "compression")]
         decompressed_buffer: None,
         ast_arena: &mut arena,
         limits: fasteetf::Limits::default(),
+
+        #[cfg(feature = "compression")]
         zlib_backend: None,
     })
     .unwrap_err();
@@ -389,9 +461,13 @@ fn test_streaming_truncated_in_reference_length() {
     let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
     let err = fasteetf::parse_etf_streaming(fasteetf::ParseOptions {
         input: b"\x83\x72\x00",
+
+        #[cfg(feature = "compression")]
         decompressed_buffer: None,
         ast_arena: &mut arena,
         limits: fasteetf::Limits::default(),
+
+        #[cfg(feature = "compression")]
         zlib_backend: None,
     })
     .unwrap_err();

@@ -154,6 +154,18 @@ pub struct Limits {
 
     /// Maximum byte size of a `NEW_FUN_EXT` payload.
     pub max_fun_size: usize,
+
+    /// Maximum byte length for a bignum's digit count.
+    ///
+    /// This is separate from `max_binary_size` because bignum digits
+    /// and binary payloads are different things that may need different limits.
+    pub max_bignum_size: usize,
+
+    /// When `true` (default), `STRING_EXT` is parsed as `List` of `Int`
+    /// terms for backward compatibility.  When `false`, `STRING_EXT` is
+    /// parsed as `Term::String` for memory efficiency (up to 32× less
+    /// arena usage).
+    pub expand_string_ext_to_list: bool,
 }
 
 impl Default for Limits {
@@ -169,6 +181,46 @@ impl Default for Limits {
             max_reference_words: MAX_REFERENCE_WORDS,
             max_depth: MAX_DEPTH,
             max_fun_size: MAX_FUN_SIZE,
+            max_bignum_size: MAX_BINARY_SIZE, // Default to same as binary size
+            expand_string_ext_to_list: true,  // Default: backward compatible
+        }
+    }
+}
+
+impl Limits {
+    /// Create limits suitable for embedded/low-memory targets.
+    pub fn embedded() -> Self {
+        Self {
+            max_binary_size: 64 * 1024,     // 64 KiB
+            max_bit_binary_size: 64 * 1024, // 64 KiB
+            max_list_len: 1024,
+            max_map_len: 1024,
+            max_atom_len: 255,
+            max_tuple_arity: 256,
+            max_string_len: 1024,
+            max_reference_words: 5,
+            max_depth: 32,
+            max_fun_size: 64 * 1024, // 64 KiB
+            max_bignum_size: 1024,
+            expand_string_ext_to_list: true,
+        }
+    }
+
+    /// Create limits that are more relaxed for large payloads.
+    pub fn relaxed() -> Self {
+        Self {
+            max_binary_size: 256 * 1024 * 1024, // 256 MiB
+            max_bit_binary_size: 256 * 1024 * 1024,
+            max_list_len: 10_000_000,
+            max_map_len: 10_000_000,
+            max_atom_len: 65_535,
+            max_tuple_arity: 10_000_000,
+            max_string_len: 65_535,
+            max_reference_words: 5,
+            max_depth: 256,
+            max_fun_size: 256 * 1024 * 1024,
+            max_bignum_size: 256 * 1024 * 1024,
+            expand_string_ext_to_list: true,
         }
     }
 }

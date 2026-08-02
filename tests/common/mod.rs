@@ -12,28 +12,42 @@ use fasteetf::*;
 /// parsing lives on the caller's stack and is cleaned up when `f` returns.
 pub fn with_parse<R>(input: &[u8], f: impl FnOnce(Term<'_>) -> R) -> R {
     let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
-    let term = parse_etf(ParseOptions {
+    #[cfg(feature = "compression")]
+    let options = ParseOptions {
         input,
         decompressed_buffer: None,
         ast_arena: &mut arena,
         limits: Limits::default(),
         zlib_backend: None,
-    })
-    .unwrap();
+    };
+    #[cfg(not(feature = "compression"))]
+    let options = ParseOptions {
+        input,
+        ast_arena: &mut arena,
+        limits: Limits::default(),
+    };
+    let term = parse_etf(options).unwrap();
     f(term)
 }
 
 /// Parse input that is expected to be malformed, returning the error.
 pub fn parse_err(input: &[u8]) -> EtfError {
     let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
-    parse_etf(ParseOptions {
+    #[cfg(feature = "compression")]
+    let options = ParseOptions {
         input,
         decompressed_buffer: None,
         ast_arena: &mut arena,
         limits: Limits::default(),
         zlib_backend: None,
-    })
-    .unwrap_err()
+    };
+    #[cfg(not(feature = "compression"))]
+    let options = ParseOptions {
+        input,
+        ast_arena: &mut arena,
+        limits: Limits::default(),
+    };
+    parse_etf(options).unwrap_err()
 }
 
 /// Encode a term into a `Vec`, panicking on error.

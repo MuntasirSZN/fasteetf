@@ -86,9 +86,6 @@ pub(crate) const ETF_MAGIC: u8 = 131;
 pub struct ParseOptions<'a> {
     /// The raw ETF byte slice to parse.
     pub input: &'a [u8],
-    /// An optional buffer used for decompression.  Must be large enough to
-    /// hold the uncompressed data when the input is a compressed ETF stream.
-    pub decompressed_buffer: Option<&'a mut [u8]>,
     /// Scratch space used by the bump arena to build the AST.  The required
     /// size depends on the complexity of the term; 8–16 kiB is a good starting
     /// point for most real-world messages.
@@ -98,6 +95,10 @@ pub struct ParseOptions<'a> {
     /// Use [`Limits::default()`] for the built-in defaults, or construct a
     /// custom `Limits` with overridden fields for tighter/looser bounds.
     pub limits: Limits,
+    /// An optional buffer used for decompression.  Must be large enough to
+    /// hold the uncompressed data when the input is a compressed ETF stream.
+    #[cfg(feature = "compression")]
+    pub decompressed_buffer: Option<&'a mut [u8]>,
     /// Optional runtime zlib backend.  When `Some`, the supplied function
     /// is used to decompress any [`COMPRESSED`](tags::COMPRESSED) term
     /// regardless of the compile-time `zlib-*` feature.  When `None`, the
@@ -109,6 +110,7 @@ pub struct ParseOptions<'a> {
     ///
     /// Pass `<MyBackend as ZlibBackend>::decompress` to use a custom
     /// implementation of the [`ZlibBackend`] trait.
+    #[cfg(feature = "compression")]
     pub zlib_backend: Option<ZlibDecompressFn>,
 }
 
@@ -143,53 +145,39 @@ pub struct ParseOptions<'a> {
 ///
 /// Spec: https://www.erlang.org/doc/apps/erts/erl_ext_dist
 pub fn parse_etf<'a>(options: ParseOptions<'a>) -> Result<Term<'a>, EtfError> {
-    #[cfg(not(feature = "compression"))]
-    let _ = (options.decompressed_buffer, options.zlib_backend);
-
     let mut cursor = cursor::Cursor::new(options.input);
 
-    // ── Magic byte ─────────────────────────────────────────────────────
+    // Magic byte.
     let magic = cursor.take(1)?[0];
     if magic != ETF_MAGIC {
         return Err(EtfError::InvalidMagicNumber);
     }
 
-    // Hot path: not compressed.  Branch is laid out so the common case
-    // is fall-through (no jump on the common path).
+    // Hot path: not compressed.
     if cursor.data.first() != Some(&tags::COMPRESSED) {
         let mut arena = arena::Bump::new(options.ast_arena, &options.limits);
         let mut depth = options.limits.max_depth + 1;
         return parser::parse_term(&mut cursor, &mut arena, &mut depth);
     }
 
-    // ── Cold path: compression wrapper ───────────────────────────────────
-    // Peek at the next byte without advancing.  If it is the COMPRESSED
-    // (80) tag we transparently decompress before recursing.
+    // Cold path: compression wrapper.
     #[cfg(not(feature = "compression"))]
     {
-        let _ = cursor; // suppress unused
         Err(EtfError::UnsupportedTag(tags::COMPRESSED))
     }
 
     #[cfg(feature = "compression")]
     {
-        cursor.take(1)?; // consume tag 80
+        cursor.take(1)?; // consume COMPRESSED tag
         let uncompressed_size = cursor.read_u32()? as usize;
-
         let decomp_buf = options
             .decompressed_buffer
             .ok_or(EtfError::InsufficientDecompressionBuffer)?;
-
         if decomp_buf.len() < uncompressed_size {
             return Err(EtfError::InsufficientDecompressionBuffer);
         }
-
         let target_buf = &mut decomp_buf[..uncompressed_size];
-
-        // Backend selection: runtime override wins; otherwise the
-        // compile-time `zlib-*` feature is used; otherwise `UnsupportedTag`.
         zlib::decompress(target_buf, cursor.data, options.zlib_backend)?;
-
         let mut dec_cursor = cursor::Cursor::new(target_buf);
         let mut arena = arena::Bump::new(options.ast_arena, &options.limits);
         let mut depth = options.limits.max_depth + 1;
@@ -237,9 +225,6 @@ pub fn parse_etf<'a>(options: ParseOptions<'a>) -> Result<Term<'a>, EtfError> {
 /// [`UnexpectedEof`] for truly truncated data, which is easier to distinguish
 /// from a mere "need more data" signal.
 pub fn parse_etf_streaming<'a>(options: ParseOptions<'a>) -> Result<Term<'a>, EtfError> {
-    #[cfg(not(feature = "compression"))]
-    let _ = (options.decompressed_buffer, options.zlib_backend);
-
     let mut cursor = cursor::Cursor::new_streaming(options.input);
 
     // Magic byte.
@@ -258,31 +243,24 @@ pub fn parse_etf_streaming<'a>(options: ParseOptions<'a>) -> Result<Term<'a>, Et
     // Cold path: compression wrapper.
     #[cfg(not(feature = "compression"))]
     {
-        let _ = cursor;
         Err(EtfError::UnsupportedTag(tags::COMPRESSED))
     }
 
     #[cfg(feature = "compression")]
     {
-        cursor.take(1)?; // consume tag 80
+        cursor.take(1)?; // consume COMPRESSED tag
         let uncompressed_size = cursor.read_u32()? as usize;
-
         let decomp_buf = options
             .decompressed_buffer
             .ok_or(EtfError::InsufficientDecompressionBuffer)?;
-
         if decomp_buf.len() < uncompressed_size {
             return Err(EtfError::InsufficientDecompressionBuffer);
         }
-
         let target_buf = &mut decomp_buf[..uncompressed_size];
-
         zlib::decompress(target_buf, cursor.data, options.zlib_backend)?;
-
         let mut dec_cursor = cursor::Cursor::new(target_buf);
         let mut arena = arena::Bump::new(options.ast_arena, &options.limits);
         let mut depth = options.limits.max_depth + 1;
-
         parser::parse_term(&mut dec_cursor, &mut arena, &mut depth)
     }
 }

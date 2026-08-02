@@ -50,22 +50,12 @@
 #[derive(Debug, Clone, Copy)]
 pub enum Term<'a> {
     /// A UTF-8 atom (spec: `ATOM_UTF8_EXT`, `SMALL_ATOM_UTF8_EXT`).
-    ///
-    /// UTF-8 validation is deferred until [`AtomUtf8::as_str`] is called.
     Atom(AtomUtf8<'a>),
     /// A small signed integer (spec: `SMALL_INTEGER_EXT`, `INTEGER_EXT`).
     Int(i32),
-    /// An arbitrary-precision integer with 1-byte digit count
-    /// (spec: `SMALL_BIG_EXT`).
-    SmallBigInt {
-        /// Sign byte: 0 = positive, 1 = negative.
-        sign: u8,
-        /// Big-endian digits (least significant byte first).
-        digits: &'a [u8],
-    },
-    /// An arbitrary-precision integer with 4-byte digit count
-    /// (spec: `LARGE_BIG_EXT`).
-    LargeBigInt {
+    /// An arbitrary-precision integer (spec: `SMALL_BIG_EXT`, `LARGE_BIG_EXT`).
+    /// The encoder auto-selects the appropriate tag based on digit count.
+    BigInt {
         /// Sign byte: 0 = positive, 1 = negative.
         sign: u8,
         /// Big-endian digits (least significant byte first).
@@ -83,29 +73,31 @@ pub enum Term<'a> {
         /// Binary data padded to a whole number of bytes.
         data: &'a [u8],
     },
+    /// A string (spec: `STRING_EXT`).
+    String(&'a [u8]),
     /// A proper list (spec: `NIL_EXT` for empty, `LIST_EXT` with nil tail).
     List(&'a [Term<'a>]),
     /// An improper list (spec: `LIST_EXT` with non-nil tail).
-    ImproperList {
-        /// Prefix elements before the tail.
-        elements: &'a [Term<'a>],
-        /// Non-nil tail term.
-        tail: &'a Term<'a>,
-    },
+    /// Stored as a single slice where the last element is the tail.
+    ImproperList(&'a [Term<'a>]),
     /// A tuple (spec: `SMALL_TUPLE_EXT`, `LARGE_TUPLE_EXT`).
     Tuple(&'a [Term<'a>]),
     /// A map / dictionary (spec: `MAP_EXT`).
     Map(&'a [(Term<'a>, Term<'a>)]),
     /// A process identifier (spec: `PID_EXT`, `NEW_PID_EXT`).
-    Pid(Pid<'a>),
+    /// The slice includes the tag byte followed by the wire bytes.
+    Pid(&'a [u8]),
     /// A port identifier (spec: `PORT_EXT`, `NEW_PORT_EXT`, `V4_PORT_EXT`).
-    Port(Port<'a>),
+    /// The slice includes the tag byte followed by the wire bytes.
+    Port(&'a [u8]),
     /// A reference (spec: `NEW_REFERENCE_EXT`, `NEWER_REFERENCE_EXT`).
-    Ref(Reference<'a>),
+    /// The slice includes the tag byte followed by the wire bytes.
+    Ref(&'a [u8]),
     /// A fun / function object (spec: `NEW_FUN_EXT`, `EXPORT_EXT`).
-    Function(Function<'a>),
+    /// The slice includes the tag byte followed by the wire bytes.
+    Function(&'a [u8]),
     /// A native record (spec: `RECORD_EXT`, OTP 29.0).
-    Record(Record<'a>),
+    Record(&'a [u8]),
 }
 
 // ── Lazy-UTF-8 atom ─────────────────────────────────────────────────────────
@@ -202,66 +194,27 @@ impl<'a> From<&'a str> for Term<'a> {
 //
 // These wrap the raw wire-format bytes for the corresponding types.  The
 // caller can inspect or decode the fields further as needed.
+//
+// NOTE: These types are now just type aliases for &[u8] since the tag byte
+// is folded into the slice for memory efficiency.
 
 /// Opaque wrapper for an Erlang process identifier (PID).
 ///
-/// The first element is the ETF tag byte (`PID_EXT`=103 or `NEW_PID_EXT`=88).
-/// The second element is the raw wire bytes **after** the tag, including the
-/// node atom and the fixed fields.
-///
-/// Wire format (PID_EXT): `103 Node(atom) ID(4) Serial(4) Creation(1)`
-/// Wire format (NEW_PID_EXT): `88 Node(atom) ID(4) Serial(4) Creation(4)`
-#[derive(Debug, Clone, Copy)]
-pub struct Pid<'a>(pub u8, pub &'a [u8]);
+/// The slice includes the ETF tag byte (`PID_EXT`=103 or `NEW_PID_EXT`=88)
+/// followed by the wire bytes.
+pub type Pid<'a> = &'a [u8];
 
 /// Opaque wrapper for an Erlang port identifier.
-///
-/// The first element is the ETF tag byte (`PORT_EXT`=102, `NEW_PORT_EXT`=89,
-/// or `V4_PORT_EXT`=120).
-/// The second element is the raw wire bytes **after** the tag, including the
-/// node atom and the fixed fields.
-///
-/// Wire format (PORT_EXT): `102 Node(atom) ID(4) Creation(1)`
-/// Wire format (NEW_PORT_EXT): `89 Node(atom) ID(4) Creation(4)`
-/// Wire format (V4_PORT_EXT): `120 Node(atom) ID(8) Creation(4)`
-#[derive(Debug, Clone, Copy)]
-pub struct Port<'a>(pub u8, pub &'a [u8]);
+pub type Port<'a> = &'a [u8];
 
 /// Opaque wrapper for an Erlang reference.
-///
-/// The first element is the ETF tag byte (`NEW_REFERENCE_EXT`=114 or
-/// `NEWER_REFERENCE_EXT`=90).
-/// The second element is the raw wire bytes **after** the tag, including the
-/// len, node atom, creation, and ID words.
-///
-/// Wire format (NEW_REFERENCE_EXT): `114 Len(2) Node(atom) Creation(1) ID[len×4]`
-/// Wire format (NEWER_REFERENCE_EXT): `90 Len(2) Node(atom) Creation(4) ID[len×4]`
-#[derive(Debug, Clone, Copy)]
-pub struct Reference<'a>(pub u8, pub &'a [u8]);
+pub type Reference<'a> = &'a [u8];
 
 /// Opaque wrapper for an Erlang fun (function object).
-///
-/// The first element is the ETF tag byte (`NEW_FUN_EXT`=112 or
-/// `EXPORT_EXT`=113).
-/// The second element is the raw wire bytes **after** the tag.
-///
-/// Wire format (NEW_FUN_EXT): `112 Size(4) Arity(1) Uniq(16) Index(4)
-/// NumFree(4) Module(atom) OldIndex(term) OldUniq(term) Pid(pid)
-/// FreeVars(NumFree terms)` — stored bytes are **everything after Size**
-/// (Arity … FreeVars).
-///
-/// Wire format (EXPORT_EXT): `113 Module(atom) Function(atom) Arity(int)`
-/// — stored bytes are Module + Function + Arity.
-#[derive(Debug, Clone, Copy)]
-pub struct Function<'a>(pub u8, pub &'a [u8]);
+pub type Function<'a> = &'a [u8];
 
 /// Opaque wrapper for an Erlang native record (OTP 29.0).
-///
-/// The wrapped bytes span everything after the `RECORD_EXT` tag byte:
-/// `#Fields(4) Flags(1) Module(atom) Name(atom) FieldNames(#Fields × atom)
-///  Values(#Fields × term)`.
-#[derive(Debug, Clone, Copy)]
-pub struct Record<'a>(pub &'a [u8]);
+pub type Record<'a> = &'a [u8];
 
 // ── Owned (heap-allocated) representations ──────────────────────────────────
 //
@@ -351,55 +304,25 @@ pub mod owned {
             impl<'a> From<$borrowed<'a>> for $name {
                 #[inline]
                 fn from(v: $borrowed<'a>) -> Self {
-                    $name(v.0.to_vec())
+                    $name(v.to_vec())
                 }
             }
         };
     }
 
+    owned_wrapper!(PidOwned, Pid);
+    owned_wrapper!(PortOwned, Port);
+    owned_wrapper!(ReferenceOwned, Reference);
     owned_wrapper!(RecordOwned, Record);
 
     /// Owned version of [`Function`].
     #[derive(Debug, Clone)]
-    pub struct FunctionOwned(pub u8, pub Vec<u8>);
+    pub struct FunctionOwned(pub Vec<u8>);
 
     impl<'a> From<Function<'a>> for FunctionOwned {
         #[inline]
         fn from(v: Function<'a>) -> Self {
-            FunctionOwned(v.0, v.1.to_vec())
-        }
-    }
-
-    /// Owned version of [`Pid`].
-    #[derive(Debug, Clone)]
-    pub struct PidOwned(pub u8, pub Vec<u8>);
-
-    impl<'a> From<Pid<'a>> for PidOwned {
-        #[inline]
-        fn from(v: Pid<'a>) -> Self {
-            PidOwned(v.0, v.1.to_vec())
-        }
-    }
-
-    /// Owned version of [`Port`].
-    #[derive(Debug, Clone)]
-    pub struct PortOwned(pub u8, pub Vec<u8>);
-
-    impl<'a> From<Port<'a>> for PortOwned {
-        #[inline]
-        fn from(v: Port<'a>) -> Self {
-            PortOwned(v.0, v.1.to_vec())
-        }
-    }
-
-    /// Owned version of [`Reference`].
-    #[derive(Debug, Clone)]
-    pub struct ReferenceOwned(pub u8, pub Vec<u8>);
-
-    impl<'a> From<Reference<'a>> for ReferenceOwned {
-        #[inline]
-        fn from(v: Reference<'a>) -> Self {
-            ReferenceOwned(v.0, v.1.to_vec())
+            FunctionOwned(v.to_vec())
         }
     }
 
@@ -407,20 +330,23 @@ pub mod owned {
         fn from(term: Term<'a>) -> Self {
             match term {
                 Term::Atom(a) => {
-                    // Use lossy decode so invalid-UTF-8 atoms don't prevent
-                    // round-tripping through the owned form.
                     let s = String::from_utf8_lossy(a.as_bytes()).into_owned();
                     OwnedTerm::Atom(s)
                 }
                 Term::Int(i) => OwnedTerm::Int(i),
-                Term::SmallBigInt { sign, digits } => OwnedTerm::SmallBigInt {
-                    sign,
-                    digits: digits.to_vec(),
-                },
-                Term::LargeBigInt { sign, digits } => OwnedTerm::LargeBigInt {
-                    sign,
-                    digits: digits.to_vec(),
-                },
+                Term::BigInt { sign, digits } => {
+                    if digits.len() > 255 {
+                        OwnedTerm::LargeBigInt {
+                            sign,
+                            digits: digits.to_vec(),
+                        }
+                    } else {
+                        OwnedTerm::SmallBigInt {
+                            sign,
+                            digits: digits.to_vec(),
+                        }
+                    }
+                }
                 Term::Float(f) => OwnedTerm::Float(f),
                 Term::Binary(b) => OwnedTerm::Binary(b.to_vec()),
                 Term::BitBinary { bits, data } => OwnedTerm::BitBinary {
@@ -430,10 +356,18 @@ pub mod owned {
                 Term::List(elements) => {
                     OwnedTerm::List(elements.iter().map(|&t| t.into()).collect())
                 }
-                Term::ImproperList { elements, tail } => OwnedTerm::ImproperList {
-                    elements: elements.iter().map(|&t| t.into()).collect(),
-                    tail: Box::new((*tail).into()),
-                },
+                Term::ImproperList(elements) => {
+                    // New representation: single slice with tail as last element
+                    let len = elements.len();
+                    if len < 2 {
+                        return OwnedTerm::List(Vec::new());
+                    }
+                    let (prefix, tail) = elements.split_at(len - 1);
+                    OwnedTerm::ImproperList {
+                        elements: prefix.iter().map(|&t| t.into()).collect(),
+                        tail: Box::new(tail[0].into()),
+                    }
+                }
                 Term::Tuple(elements) => {
                     OwnedTerm::Tuple(elements.iter().map(|&t| t.into()).collect())
                 }
@@ -445,6 +379,7 @@ pub mod owned {
                 Term::Ref(r) => OwnedTerm::Ref(r.into()),
                 Term::Function(f) => OwnedTerm::Function(f.into()),
                 Term::Record(r) => OwnedTerm::Record(r.into()),
+                Term::String(data) => OwnedTerm::Binary(data.to_vec()), // String is bytes, store as Binary
             }
         }
     }

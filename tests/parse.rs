@@ -56,14 +56,14 @@ fn test_legacy_float() {
 #[test]
 fn test_small_big() {
     with_parse(b"\x83\x6e\x02\x00\x00\x01", |term| {
-        assert!(matches!(term, Term::SmallBigInt { sign: 0, digits } if digits == [0, 1]));
+        assert!(matches!(term, Term::BigInt { sign: 0, digits } if digits == [0, 1]));
     });
 }
 
 #[test]
 fn test_large_big() {
     with_parse(&[131, 111, 0, 0, 0, 1, 0, 42], |term| {
-        assert!(matches!(term, Term::LargeBigInt { sign: 0, digits } if digits == [42]));
+        assert!(matches!(term, Term::BigInt { sign: 0, digits } if digits == [42]));
     });
 }
 
@@ -180,10 +180,11 @@ fn test_proper_list() {
 #[test]
 fn test_improper_list() {
     with_parse(&[131, 108, 0, 0, 0, 1, 97, 1, 97, 2], |term| match term {
-        Term::ImproperList { elements, tail } => {
-            assert_eq!(elements.len(), 1);
+        Term::ImproperList(elements) => {
+            // New representation: last element is the tail
+            assert_eq!(elements.len(), 2); // 1 element + 1 tail
             assert!(matches!(elements[0], Term::Int(1)));
-            assert!(matches!(tail, Term::Int(2)));
+            assert!(matches!(elements[1], Term::Int(2))); // tail
         }
         _ => panic!("expected ImproperList"),
     });
@@ -372,14 +373,21 @@ fn test_arena_exhaustion() {
     let mut arena = vec![MaybeUninit::<u8>::uninit(); 16];
     let input = b"\x83\x68\x0a\x61\x01\x61\x02\x61\x03\x61\x04\x61\x05\
                   \x61\x06\x61\x07\x61\x08\x61\x09\x61\x0a";
-    let err = parse_etf(ParseOptions {
+    #[cfg(feature = "compression")]
+    let options = ParseOptions {
         input,
         decompressed_buffer: None,
         ast_arena: &mut arena,
         limits: Limits::default(),
         zlib_backend: None,
-    })
-    .unwrap_err();
+    };
+    #[cfg(not(feature = "compression"))]
+    let options = ParseOptions {
+        input,
+        ast_arena: &mut arena,
+        limits: Limits::default(),
+    };
+    let err = parse_etf(options).unwrap_err();
     assert!(matches!(err, EtfError::ArenaExhausted));
 }
 
@@ -474,9 +482,8 @@ fn test_new_port_ext() {
     buf.extend_from_slice(&[0, 0, 0, 1]);
     buf.extend_from_slice(&[0, 0, 0, 1]);
     with_parse(&buf, |term| match term {
-        Term::Port(Port(tag, data)) => {
-            assert_eq!(tag, 89);
-            assert_eq!(data.len(), 6 + 8); // 6 for the atom + 8 for ID+Creation
+        Term::Port(data) => {
+            assert_eq!(data.len(), 1 + 6 + 8); // 1 for tag + 6 for the atom + 8 for ID+Creation
         }
         _ => panic!("expected Port"),
     });
@@ -543,7 +550,7 @@ fn test_owned_large_big_conversion() {
     with_parse(&[131, 111, 0, 0, 0, 2, 0, 0xAB, 0xCD], |term| {
         let owned: OwnedTerm = term.into();
         match owned {
-            OwnedTerm::LargeBigInt { sign, digits } => {
+            OwnedTerm::SmallBigInt { sign, digits } => {
                 assert_eq!(sign, 0);
                 assert_eq!(digits, vec![0xAB, 0xCD]);
             }
@@ -642,8 +649,7 @@ fn test_owned_pid_conversion() {
         |term| {
             let owned: OwnedTerm = term.into();
             match owned {
-                OwnedTerm::Pid(PidOwned(tag, data)) => {
-                    assert_eq!(tag, 103);
+                OwnedTerm::Pid(PidOwned(data)) => {
                     assert!(!data.is_empty());
                 }
                 _ => panic!("expected Pid, got {owned:?}"),
@@ -660,8 +666,7 @@ fn test_owned_port_conversion() {
         |term| {
             let owned: OwnedTerm = term.into();
             match owned {
-                OwnedTerm::Port(PortOwned(tag, data)) => {
-                    assert_eq!(tag, 102);
+                OwnedTerm::Port(PortOwned(data)) => {
                     assert!(!data.is_empty());
                 }
                 _ => panic!("expected Port, got {owned:?}"),
@@ -680,8 +685,7 @@ fn test_owned_ref_conversion() {
         |term| {
             let owned: OwnedTerm = term.into();
             match owned {
-                OwnedTerm::Ref(ReferenceOwned(tag, data)) => {
-                    assert_eq!(tag, 114);
+                OwnedTerm::Ref(ReferenceOwned(data)) => {
                     assert!(!data.is_empty());
                 }
                 _ => panic!("expected Ref, got {owned:?}"),
@@ -696,8 +700,7 @@ fn test_owned_function_conversion() {
     with_parse(b"\x83\x71\x77\x05lists\x77\x03map\x61\x02", |term| {
         let owned: OwnedTerm = term.into();
         match owned {
-            OwnedTerm::Function(FunctionOwned(tag, data)) => {
-                assert_eq!(tag, 113);
+            OwnedTerm::Function(FunctionOwned(data)) => {
                 assert!(!data.is_empty());
             }
             _ => panic!("expected Function, got {owned:?}"),
@@ -733,4 +736,13 @@ fn test_atom_utf8_lossy_string_conversion() {
             _ => panic!("expected Atom"),
         }
     });
+}
+
+#[test]
+fn test_term_size() {
+    // A3: Term should be 24 bytes (was 32 bytes before A3)
+    // This test verifies the size optimization
+    let size = std::mem::size_of::<fasteetf::Term>();
+    println!("Term size: {} bytes", size);
+    assert_eq!(size, 24);
 }

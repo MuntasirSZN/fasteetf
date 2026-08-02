@@ -7,7 +7,7 @@
 // implementation. `fasteetf` supports several, selectable at compile
 // time via Cargo features or at runtime via a function pointer.
 //
-// # Compile-time backends (mutually exclusive)
+// # Compile-time backends (additive, last-one-wins)
 //
 // | Feature           | Backend                                                       | Needs `alloc`? |
 // |-------------------|---------------------------------------------------------------|----------------|
@@ -22,7 +22,7 @@
 // Decompression is always available (the pure-Rust backends use a
 // stack-allocated state in the decompression path).  Compression
 // requires the global allocator for the pure-Rust backends because
-// they heap-allocate their internal `CompressorOxide` / `z_stream` /
+// they heap-allocate their internal `CompressorOxide` / `zlib_z_stream` /
 // `Box<HuffmanOxide>` state; this is what our `alloc` feature
 // propagates to `rust-allocator` / `with-alloc` on those backends.
 // The C-based backends do not need an allocator.
@@ -41,7 +41,44 @@
 // If no backend is selected at compile time and no runtime backend is
 // supplied, encountering a [`COMPRESSED`] term yields
 // [`EtfError::UnsupportedTag`].
+//
+// # Multiple backends
+//
+// Enabling more than one zlib backend simultaneously compiles all of them
+// in, but only the last one in source order (highest priority) is used at
+// runtime.  This wastes compile time and binary size.  Consider enabling
+// only one backend.
 // ──────────────────────────────────────────────────────────────────────────
+
+// B22: Warn if multiple zlib backends are enabled
+#[cfg(all(
+    feature = "zlib-rs",
+    any(
+        feature = "miniz_oxide",
+        feature = "zlib",
+        feature = "zlib-default",
+        feature = "zlib-ng-compat",
+        feature = "zlib-ng",
+        feature = "cloudflare-zlib"
+    )
+))]
+compile_error!(
+    "Multiple zlib backends enabled. Enable only one: zlib-rs, miniz_oxide, zlib, zlib-default, zlib-ng-compat, zlib-ng, or cloudflare-zlib."
+);
+
+#[cfg(all(
+    feature = "miniz_oxide",
+    any(
+        feature = "zlib",
+        feature = "zlib-default",
+        feature = "zlib-ng-compat",
+        feature = "zlib-ng",
+        feature = "cloudflare-zlib"
+    )
+))]
+compile_error!(
+    "Multiple zlib backends enabled. Enable only one: zlib-rs, miniz_oxide, zlib, zlib-default, zlib-ng-compat, zlib-ng, or cloudflare-zlib."
+);
 
 use crate::error::EtfError;
 

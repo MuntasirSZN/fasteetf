@@ -226,7 +226,7 @@ fn test_serde_record_serialize() {
 
 #[test]
 fn test_serde_small_big_int() {
-    let term = Term::SmallBigInt {
+    let term = Term::BigInt {
         sign: 0,
         digits: &[0xAB, 0xCD],
     };
@@ -261,7 +261,7 @@ fn test_serde_owned_serialize_float() {
 
 #[test]
 fn test_serde_owned_serialize_small_big() {
-    let term = OwnedTerm::SmallBigInt {
+    let term = OwnedTerm::BigInt {
         sign: 1,
         digits: vec![1, 2, 3],
     };
@@ -272,7 +272,7 @@ fn test_serde_owned_serialize_small_big() {
 
 #[test]
 fn test_serde_owned_serialize_large_big() {
-    let term = OwnedTerm::LargeBigInt {
+    let term = OwnedTerm::BigInt {
         sign: 0,
         digits: vec![9, 8, 7],
     };
@@ -390,7 +390,7 @@ fn test_serde_deserialize_u64_overflow() {
     let json = format!("{}", u64::MAX);
     let term: OwnedTerm = serde_json::from_str(&json).unwrap();
     match term {
-        OwnedTerm::SmallBigInt { sign: 0, digits } => {
+        OwnedTerm::BigInt { sign: 0, digits } => {
             assert_eq!(digits.len(), 8);
         }
         other => panic!("expected SmallBigInt, got {other:?}"),
@@ -403,7 +403,7 @@ fn test_serde_deserialize_i64_overflow_negative() {
     let json = format!("{}", i64::MIN);
     let term: OwnedTerm = serde_json::from_str(&json).unwrap();
     match term {
-        OwnedTerm::SmallBigInt { sign: 1, digits } => {
+        OwnedTerm::BigInt { sign: 1, digits } => {
             assert!(!digits.is_empty());
         }
         other => panic!("expected SmallBigInt, got {other:?}"),
@@ -416,7 +416,7 @@ fn test_serde_deserialize_i64_overflow_positive() {
     let json = format!("{}", i64::MAX);
     let term: OwnedTerm = serde_json::from_str(&json).unwrap();
     match term {
-        OwnedTerm::SmallBigInt { sign: 0, digits } => {
+        OwnedTerm::BigInt { sign: 0, digits } => {
             assert!(!digits.is_empty());
         }
         other => panic!("expected SmallBigInt, got {other:?}"),
@@ -428,7 +428,7 @@ fn test_serde_deserialize_u32_overflow() {
     let json = format!("{}", u32::MAX);
     let term: OwnedTerm = serde_json::from_str(&json).unwrap();
     match term {
-        OwnedTerm::SmallBigInt { sign: 0, digits } => {
+        OwnedTerm::BigInt { sign: 0, digits } => {
             // u32::MAX = 0xFFFFFFFF, padded to 8 bytes (u64 width). serde_json
             // calls visit_u64 so the digit buffer is the full 8-byte LE repr.
             assert_eq!(digits, vec![0xFF, 0xFF, 0xFF, 0xFF, 0, 0, 0, 0]);
@@ -479,7 +479,7 @@ fn test_serde_deserialize_byte_buf() {
 
 #[test]
 fn test_serde_term_serialize_large_big() {
-    let term = Term::LargeBigInt {
+    let term = Term::BigInt {
         sign: 1,
         digits: &[0xAB, 0xCD],
     };
@@ -844,7 +844,7 @@ fn test_serde_ownedterm_visit_u32() {
     }
     // u32::MAX doesn't fit in i32 → SmallBigInt path
     let term: OwnedTerm = serde_core::Deserialize::deserialize(U32Deser(u32::MAX)).unwrap();
-    assert!(matches!(term, OwnedTerm::SmallBigInt { sign: 0, .. }));
+    assert!(matches!(term, OwnedTerm::BigInt { sign: 0, .. }));
 }
 
 #[test]

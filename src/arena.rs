@@ -1,8 +1,8 @@
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 
-use crate::Limits;
 use crate::error::EtfError;
+use crate::limits::Limits;
 
 /// A simple bump allocator used to build the AST from a pre-allocated scratch buffer.
 ///
@@ -70,7 +70,9 @@ impl<'a> Bump<'a> {
     #[inline(always)]
     pub(crate) fn alloc_slice<T>(&mut self, len: usize) -> Result<&'a mut [T], EtfError> {
         let align = core::mem::align_of::<T>();
-        let size = core::mem::size_of::<T>() * len;
+        let size = core::mem::size_of::<T>()
+            .checked_mul(len)
+            .ok_or(EtfError::ArenaExhausted)?;
 
         // Align pointer up to T's alignment.
         let addr = (self.ptr as usize + align - 1) & !(align - 1);

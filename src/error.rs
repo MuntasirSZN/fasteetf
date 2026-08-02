@@ -59,6 +59,7 @@ impl Needed {
 
 /// Errors that can occur when decoding an ETF byte stream.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[non_exhaustive]
 pub enum EtfError {
     /// The input ended before the expected number of bytes could be read,
     /// and the caller indicated no more data is coming.
@@ -161,4 +162,15 @@ pub enum EtfError {
     /// that this parser does not yet handle).
     #[error("unsupported or invalid tag: {0}")]
     UnsupportedTag(u8),
+
+    /// A field that must be an atom (e.g. node, module, function name)
+    /// was not an atom tag.
+    #[error("expected atom tag for atom field")]
+    InvalidAtomField,
+
+    /// A reference word count exceeds [`MAX_REFERENCE_WORDS`].
+    ///
+    /// [`MAX_REFERENCE_WORDS`]: crate::limits::MAX_REFERENCE_WORDS
+    #[error("reference exceeds maximum word count")]
+    ReferenceTooLarge,
 }

@@ -35,9 +35,9 @@
 // See the documentation on each method for the corresponding ETF tag.
 // ─────────────────────────────────────────────────────────────────────────────
 
-use crate::Limits;
 use crate::cursor::Cursor;
 use crate::error::EtfError;
+use crate::limits::Limits;
 use crate::tags::*;
 #[cfg(feature = "compression")]
 use crate::zlib;

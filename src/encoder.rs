@@ -45,14 +45,11 @@ impl<'a> Encoder<'a> {
         Self { buf, offset: 0 }
     }
 
-    /// Number of unwritten bytes remaining.
     #[inline(always)]
     fn remaining(&self) -> usize {
         self.buf.len() - self.offset
     }
 
-    /// Reserve capacity for `n` bytes, returning a mutable reference to
-    /// the reserved region.  The caller must fill exactly `n` bytes.
     #[inline(always)]
     fn reserve(&mut self, n: usize) -> Result<&mut [u8], EtfError> {
         if self.remaining() < n {
@@ -62,7 +59,20 @@ impl<'a> Encoder<'a> {
         self.offset += n;
         Ok(slot)
     }
+}
 
+/// Trait for encoding targets.  This allows the same encoding logic to
+/// write to either a fixed buffer ([`Encoder`]) or a growable [`Vec<u8>`]
+/// ([`VecEncoder`]), eliminating code duplication.
+pub(crate) trait Sink {
+    fn write_u8(&mut self, v: u8) -> Result<(), EtfError>;
+    fn write_u16(&mut self, v: u16) -> Result<(), EtfError>;
+    fn write_u32(&mut self, v: u32) -> Result<(), EtfError>;
+    fn write_f64(&mut self, v: f64) -> Result<(), EtfError>;
+    fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), EtfError>;
+}
+
+impl<'a> Sink for Encoder<'a> {
     #[inline(always)]
     fn write_u8(&mut self, v: u8) -> Result<(), EtfError> {
         self.reserve(1)?[0] = v;
@@ -89,10 +99,50 @@ impl<'a> Encoder<'a> {
 
     #[inline(always)]
     fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), EtfError> {
-        if bytes.is_empty() {
-            return Ok(());
-        }
         self.reserve(bytes.len())?.copy_from_slice(bytes);
+        Ok(())
+    }
+}
+
+/// A `Sink` that counts bytes without writing them.
+/// Used by `estimate_size` to compute the encoded size.
+#[cfg(feature = "alloc")]
+struct CountingSink(usize);
+
+#[cfg(feature = "alloc")]
+impl Sink for CountingSink {
+    #[inline(always)]
+    #[allow(unused_variables)]
+    fn write_u8(&mut self, v: u8) -> Result<(), EtfError> {
+        self.0 += 1;
+        Ok(())
+    }
+
+    #[inline(always)]
+    #[allow(unused_variables)]
+    fn write_u16(&mut self, v: u16) -> Result<(), EtfError> {
+        self.0 += 2;
+        Ok(())
+    }
+
+    #[inline(always)]
+    #[allow(unused_variables)]
+    fn write_u32(&mut self, v: u32) -> Result<(), EtfError> {
+        self.0 += 4;
+        Ok(())
+    }
+
+    #[inline(always)]
+    #[allow(unused_variables)]
+    fn write_f64(&mut self, v: f64) -> Result<(), EtfError> {
+        self.0 += 8;
+        Ok(())
+    }
+
+    #[inline(always)]
+    #[allow(unused_variables)]
+    fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), EtfError> {
+        self.0 += bytes.len();
         Ok(())
     }
 }
@@ -123,7 +173,7 @@ pub fn encode_to_vec(term: &Term<'_>) -> Result<Vec<u8>, EtfError> {
     let cap = estimate_size(term);
     let mut enc = VecEncoder::with_capacity(cap);
     enc.write_u8(ETF_MAGIC)?;
-    encode_term_vec(&mut enc, term)?;
+    encode_term(&mut enc, term)?;
     Ok(enc.into_vec())
 }
 
@@ -210,13 +260,18 @@ pub fn encode_to_compressed(
 
 // ── Theme: encode_term dispatch ────────────────────────────────────────────
 
-/// Recursively encode a single ETF term into the encoder.
-fn encode_term(enc: &mut Encoder, term: &Term) -> Result<(), EtfError> {
+/// Recursively encode a single ETF term into any [`Sink`].
+fn encode_term<S: Sink>(enc: &mut S, term: &Term) -> Result<(), EtfError> {
     match term {
         Term::Int(v) => encode_int(enc, *v),
 
-        Term::SmallBigInt { sign, digits } => encode_small_big(enc, *sign, digits),
-        Term::LargeBigInt { sign, digits } => encode_large_big(enc, *sign, digits),
+        Term::BigInt { sign, digits } => {
+            if digits.len() > 255 {
+                encode_large_big(enc, *sign, digits)
+            } else {
+                encode_small_big(enc, *sign, digits)
+            }
+        }
 
         Term::Float(v) => encode_float(enc, *v),
 
@@ -225,43 +280,48 @@ fn encode_term(enc: &mut Encoder, term: &Term) -> Result<(), EtfError> {
         Term::Tuple(elements) => encode_tuple(enc, elements),
 
         Term::List(elements) => encode_list(enc, elements),
-        Term::ImproperList { elements, tail } => encode_improper_list(enc, elements, tail),
+        Term::ImproperList(elements) => {
+            // elements slice includes the tail as the last element
+            let len = elements.len();
+            if len < 2 {
+                return Err(EtfError::InvalidSize);
+            }
+            let (prefix, tail) = elements.split_at(len - 1);
+            encode_improper_list(enc, prefix, &tail[0])
+        }
 
         Term::Map(pairs) => encode_map(enc, pairs),
 
         Term::Binary(data) => encode_binary(enc, data),
         Term::BitBinary { bits, data } => encode_bit_binary(enc, *bits, data),
-
-        Term::Pid(p) => encode_opaque(enc, p.0, p.1),
-        Term::Port(p) => encode_opaque(enc, p.0, p.1),
-        Term::Ref(r) => encode_opaque(enc, r.0, r.1),
-        Term::Function(f) => {
-            // NEW_FUN_EXT stores everything after the Size field; we need
-            // to re-insert Size = 4 + data.len().
-            if f.0 == NEW_FUN_EXT {
-                enc.write_u8(NEW_FUN_EXT)?;
-                enc.write_u32(4u32.wrapping_add(f.1.len() as u32))?;
-                enc.write_bytes(f.1)?;
-            } else {
-                encode_opaque(enc, f.0, f.1)?;
-            }
-            Ok(())
+        Term::String(data) => {
+            enc.write_u8(STRING_EXT)?;
+            enc.write_u16(data.len() as u16)?;
+            enc.write_bytes(data)
         }
-        Term::Record(r) => {
-            enc.write_u8(RECORD_EXT)?;
-            enc.write_bytes(r.0)?;
-            Ok(())
+
+        Term::Pid(data) => enc.write_bytes(data),
+        Term::Port(data) => enc.write_bytes(data),
+        Term::Ref(data) => enc.write_bytes(data),
+        Term::Function(data) => {
+            // data includes the tag byte and any necessary header fields
+            // (e.g., for NEW_FUN_EXT, data includes Tag + Size + payload)
+            // Just write the data as-is
+            enc.write_bytes(data)
+        }
+        Term::Record(data) => {
+            // data includes the tag byte (RECORD_EXT=67)
+            // Just write the data as-is
+            enc.write_bytes(data)
         }
     }
 }
-
-// ── Integers ───────────────────────────────────────────────────────────────
 
 /// Encode an integer using the most compact representation.
 ///
 /// - 0 … 255 → `SMALL_INTEGER_EXT` (3 bytes total with magic)
 /// - otherwise → `INTEGER_EXT` (6 bytes total with magic)
-fn encode_int(enc: &mut Encoder, v: i32) -> Result<(), EtfError> {
+fn encode_int<S: Sink>(enc: &mut S, v: i32) -> Result<(), EtfError> {
     if (0..=255).contains(&v) {
         enc.write_u8(SMALL_INTEGER_EXT)?;
         enc.write_u8(v as u8)
@@ -276,7 +336,7 @@ fn encode_int(enc: &mut Encoder, v: i32) -> Result<(), EtfError> {
 /// Encode `SMALL_BIG_EXT` (110): bignum with 1-byte digit count.
 ///
 /// Wire: `110 n Sign d0…d(n-1)` — digits in little-endian base 256.
-fn encode_small_big(enc: &mut Encoder, sign: u8, digits: &[u8]) -> Result<(), EtfError> {
+fn encode_small_big<S: Sink>(enc: &mut S, sign: u8, digits: &[u8]) -> Result<(), EtfError> {
     let len = digits.len();
     if len > 255 {
         // Too many digits for SMALL_BIG_EXT; upgrade to LARGE_BIG_EXT.
@@ -291,7 +351,7 @@ fn encode_small_big(enc: &mut Encoder, sign: u8, digits: &[u8]) -> Result<(), Et
 /// Encode `LARGE_BIG_EXT` (111): bignum with 4-byte digit count.
 ///
 /// Wire: `111 n Sign d0…d(n-1)` — digits in little-endian base 256.
-fn encode_large_big(enc: &mut Encoder, sign: u8, digits: &[u8]) -> Result<(), EtfError> {
+fn encode_large_big<S: Sink>(enc: &mut S, sign: u8, digits: &[u8]) -> Result<(), EtfError> {
     enc.write_u8(LARGE_BIG_EXT)?;
     enc.write_u32(digits.len() as u32)?;
     enc.write_u8(sign)?;
@@ -303,7 +363,7 @@ fn encode_large_big(enc: &mut Encoder, sign: u8, digits: &[u8]) -> Result<(), Et
 /// Encode `NEW_FLOAT_EXT` (70): IEEE 754 binary64.
 ///
 /// Wire: `70 IEEE_float(8)`
-fn encode_float(enc: &mut Encoder, v: f64) -> Result<(), EtfError> {
+fn encode_float<S: Sink>(enc: &mut S, v: f64) -> Result<(), EtfError> {
     enc.write_u8(NEW_FLOAT_EXT)?;
     enc.write_f64(v)
 }
@@ -314,7 +374,7 @@ fn encode_float(enc: &mut Encoder, v: f64) -> Result<(), EtfError> {
 ///
 /// - len < 256 → `SMALL_ATOM_UTF8_EXT` (119)
 /// - len ≤ 65535 → `ATOM_UTF8_EXT` (118)
-fn encode_atom(enc: &mut Encoder, bytes: &[u8]) -> Result<(), EtfError> {
+fn encode_atom<S: Sink>(enc: &mut S, bytes: &[u8]) -> Result<(), EtfError> {
     let len = bytes.len();
     if len < 256 {
         enc.write_u8(SMALL_ATOM_UTF8_EXT)?;
@@ -332,7 +392,7 @@ fn encode_atom(enc: &mut Encoder, bytes: &[u8]) -> Result<(), EtfError> {
 ///
 /// - arity < 256 → `SMALL_TUPLE_EXT` (104)
 /// - arity ≥ 256 → `LARGE_TUPLE_EXT` (105)
-fn encode_tuple(enc: &mut Encoder, elements: &[Term]) -> Result<(), EtfError> {
+fn encode_tuple<S: Sink>(enc: &mut S, elements: &[Term]) -> Result<(), EtfError> {
     let arity = elements.len();
     if arity < 256 {
         enc.write_u8(SMALL_TUPLE_EXT)?;
@@ -353,7 +413,7 @@ fn encode_tuple(enc: &mut Encoder, elements: &[Term]) -> Result<(), EtfError> {
 ///
 /// - empty → `NIL_EXT` (106)
 /// - non-empty → `LIST_EXT (108) Len(4) Elements Tail(NIL_EXT)`
-fn encode_list(enc: &mut Encoder, elements: &[Term]) -> Result<(), EtfError> {
+fn encode_list<S: Sink>(enc: &mut S, elements: &[Term]) -> Result<(), EtfError> {
     if elements.is_empty() {
         return enc.write_u8(NIL_EXT);
     }
@@ -368,7 +428,11 @@ fn encode_list(enc: &mut Encoder, elements: &[Term]) -> Result<(), EtfError> {
 /// Encode an improper list `[a, b | c]`.
 ///
 /// Wire: `LIST_EXT (108) Len(4) Elements Tail`
-fn encode_improper_list(enc: &mut Encoder, elements: &[Term], tail: &Term) -> Result<(), EtfError> {
+fn encode_improper_list<S: Sink>(
+    enc: &mut S,
+    elements: &[Term],
+    tail: &Term,
+) -> Result<(), EtfError> {
     enc.write_u8(LIST_EXT)?;
     enc.write_u32(elements.len() as u32)?;
     for elem in elements {
@@ -382,7 +446,7 @@ fn encode_improper_list(enc: &mut Encoder, elements: &[Term], tail: &Term) -> Re
 /// Encode `MAP_EXT` (116): key-value pairs with 4-byte arity.
 ///
 /// Wire: `116 Arity(4) K1 V1 … Kn Vn`
-fn encode_map(enc: &mut Encoder, pairs: &[(Term, Term)]) -> Result<(), EtfError> {
+fn encode_map<S: Sink>(enc: &mut S, pairs: &[(Term, Term)]) -> Result<(), EtfError> {
     enc.write_u8(MAP_EXT)?;
     enc.write_u32(pairs.len() as u32)?;
     for (key, value) in pairs {
@@ -397,7 +461,7 @@ fn encode_map(enc: &mut Encoder, pairs: &[(Term, Term)]) -> Result<(), EtfError>
 /// Encode `BINARY_EXT` (109): raw binary with 4-byte length.
 ///
 /// Wire: `109 Len(4) Data[Len]`
-fn encode_binary(enc: &mut Encoder, data: &[u8]) -> Result<(), EtfError> {
+fn encode_binary<S: Sink>(enc: &mut S, data: &[u8]) -> Result<(), EtfError> {
     enc.write_u8(BINARY_EXT)?;
     enc.write_u32(data.len() as u32)?;
     enc.write_bytes(data)
@@ -406,7 +470,7 @@ fn encode_binary(enc: &mut Encoder, data: &[u8]) -> Result<(), EtfError> {
 /// Encode `BIT_BINARY_EXT` (77): bitstring with 4-byte length + 1-byte bits.
 ///
 /// Wire: `77 Len(4) Bits(1) Data[Len]`
-fn encode_bit_binary(enc: &mut Encoder, bits: u8, data: &[u8]) -> Result<(), EtfError> {
+fn encode_bit_binary<S: Sink>(enc: &mut S, bits: u8, data: &[u8]) -> Result<(), EtfError> {
     enc.write_u8(BIT_BINARY_EXT)?;
     enc.write_u32(data.len() as u32)?;
     enc.write_u8(bits)?;
@@ -416,7 +480,7 @@ fn encode_bit_binary(enc: &mut Encoder, bits: u8, data: &[u8]) -> Result<(), Etf
 // ── Opaque wrappers ────────────────────────────────────────────────────────
 
 /// Encode an opaque wrapper: write the tag byte followed by the raw bytes.
-fn encode_opaque(enc: &mut Encoder, tag: u8, data: &[u8]) -> Result<(), EtfError> {
+fn encode_opaque<S: Sink>(enc: &mut S, tag: u8, data: &[u8]) -> Result<(), EtfError> {
     enc.write_u8(tag)?;
     enc.write_bytes(data)
 }
@@ -429,67 +493,9 @@ fn encode_opaque(enc: &mut Encoder, tag: u8, data: &[u8]) -> Result<(), EtfError
 /// Over-estimating is fine; we truncate at the end.
 #[cfg(feature = "alloc")]
 fn estimate_size(term: &Term) -> usize {
-    // Magic byte + per-term overhead.
-    1 + match term {
-        Term::Int(v) => {
-            if (0..=255).contains(v) {
-                2 // SMALL_INTEGER_EXT + 1 byte
-            } else {
-                5 // INTEGER_EXT + 4 bytes
-            }
-        }
-        Term::SmallBigInt { sign: _, digits } => {
-            if digits.len() > 255 {
-                6 + digits.len() // LARGE_BIG_EXT + 4 + 1 + digits
-            } else {
-                3 + digits.len() // SMALL_BIG_EXT + 1 + 1 + digits
-            }
-        }
-        Term::LargeBigInt { sign: _, digits } => 6 + digits.len(),
-        Term::Float(_) => 9, // NEW_FLOAT_EXT + 8 bytes
-        Term::Atom(a) => {
-            let len = a.len();
-            if len < 256 {
-                2 + len // SMALL_ATOM_UTF8_EXT + 1 + data
-            } else {
-                3 + len // ATOM_UTF8_EXT + 2 + data
-            }
-        }
-        Term::Tuple(elements) => {
-            let arity = elements.len();
-            let header = if arity < 256 { 2 } else { 5 };
-            header + elements.iter().map(estimate_size).sum::<usize>()
-        }
-        Term::List(elements) => {
-            if elements.is_empty() {
-                1 // NIL_EXT
-            } else {
-                5 + elements.iter().map(estimate_size).sum::<usize>() + 1 // LIST_EXT + 4 + elements + NIL
-            }
-        }
-        Term::ImproperList { elements, tail } => {
-            5 + elements.iter().map(estimate_size).sum::<usize>() + estimate_size(tail)
-        }
-        Term::Map(pairs) => {
-            5 + pairs
-                .iter()
-                .map(|(k, v)| estimate_size(k) + estimate_size(v))
-                .sum::<usize>()
-        }
-        Term::Binary(data) => 5 + data.len(),
-        Term::BitBinary { bits: _, data } => 6 + data.len(),
-        Term::Pid(p) => 1 + p.1.len(),
-        Term::Port(p) => 1 + p.1.len(),
-        Term::Ref(r) => 1 + r.1.len(),
-        Term::Function(f) => {
-            if f.0 == NEW_FUN_EXT {
-                5 + f.1.len() // tag + Size(4) + data
-            } else {
-                1 + f.1.len()
-            }
-        }
-        Term::Record(r) => 1 + r.0.len(),
-    }
+    let mut sink = CountingSink(0);
+    let _ = encode_term(&mut sink, term);
+    sink.0
 }
 
 // ── VecEncoder: a growable encoder for the fallback path ───────────────────
@@ -503,6 +509,39 @@ struct VecEncoder {
 }
 
 #[cfg(feature = "alloc")]
+impl Sink for VecEncoder {
+    #[inline(always)]
+    fn write_u8(&mut self, v: u8) -> Result<(), EtfError> {
+        self.buf.push(v);
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn write_u16(&mut self, v: u16) -> Result<(), EtfError> {
+        self.buf.extend_from_slice(&v.to_be_bytes());
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn write_u32(&mut self, v: u32) -> Result<(), EtfError> {
+        self.buf.extend_from_slice(&v.to_be_bytes());
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn write_f64(&mut self, v: f64) -> Result<(), EtfError> {
+        self.buf.extend_from_slice(&v.to_be_bytes());
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), EtfError> {
+        self.buf.extend_from_slice(bytes);
+        Ok(())
+    }
+}
+
+#[cfg(feature = "alloc")]
 impl VecEncoder {
     fn with_capacity(cap: usize) -> Self {
         Self {
@@ -510,162 +549,7 @@ impl VecEncoder {
         }
     }
 
-    fn write_u8(&mut self, v: u8) -> Result<(), EtfError> {
-        self.buf.push(v);
-        Ok(())
-    }
-
-    fn write_u16(&mut self, v: u16) -> Result<(), EtfError> {
-        self.buf.extend_from_slice(&v.to_be_bytes());
-        Ok(())
-    }
-
-    fn write_u32(&mut self, v: u32) -> Result<(), EtfError> {
-        self.buf.extend_from_slice(&v.to_be_bytes());
-        Ok(())
-    }
-
-    fn write_f64(&mut self, v: f64) -> Result<(), EtfError> {
-        self.buf.extend_from_slice(&v.to_be_bytes());
-        Ok(())
-    }
-
-    fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), EtfError> {
-        self.buf.extend_from_slice(bytes);
-        Ok(())
-    }
-
     fn into_vec(self) -> Vec<u8> {
         self.buf
-    }
-}
-
-/// Encode a term into a `VecEncoder` (fallback path when size estimate
-/// was too small).
-#[cfg(feature = "alloc")]
-fn encode_term_vec(enc: &mut VecEncoder, term: &Term) -> Result<(), EtfError> {
-    match term {
-        Term::Int(v) => {
-            if (0..=255).contains(v) {
-                enc.write_u8(SMALL_INTEGER_EXT)?;
-                enc.write_u8(*v as u8)
-            } else {
-                enc.write_u8(INTEGER_EXT)?;
-                enc.write_u32(*v as u32)
-            }
-        }
-        Term::SmallBigInt { sign, digits } => {
-            if digits.len() > 255 {
-                enc.write_u8(LARGE_BIG_EXT)?;
-                enc.write_u32(digits.len() as u32)?;
-            } else {
-                enc.write_u8(SMALL_BIG_EXT)?;
-                enc.write_u8(digits.len() as u8)?;
-            }
-            enc.write_u8(*sign)?;
-            enc.write_bytes(digits)
-        }
-        Term::LargeBigInt { sign, digits } => {
-            enc.write_u8(LARGE_BIG_EXT)?;
-            enc.write_u32(digits.len() as u32)?;
-            enc.write_u8(*sign)?;
-            enc.write_bytes(digits)
-        }
-        Term::Float(v) => {
-            enc.write_u8(NEW_FLOAT_EXT)?;
-            enc.write_f64(*v)
-        }
-        Term::Atom(a) => {
-            let bytes = a.as_bytes();
-            let len = bytes.len();
-            if len < 256 {
-                enc.write_u8(SMALL_ATOM_UTF8_EXT)?;
-                enc.write_u8(len as u8)?;
-            } else {
-                enc.write_u8(ATOM_UTF8_EXT)?;
-                enc.write_u16(len as u16)?;
-            }
-            enc.write_bytes(bytes)
-        }
-        Term::Tuple(elements) => {
-            let arity = elements.len();
-            if arity < 256 {
-                enc.write_u8(SMALL_TUPLE_EXT)?;
-                enc.write_u8(arity as u8)?;
-            } else {
-                enc.write_u8(LARGE_TUPLE_EXT)?;
-                enc.write_u32(arity as u32)?;
-            }
-            for elem in elements.iter() {
-                encode_term_vec(enc, elem)?;
-            }
-            Ok(())
-        }
-        Term::List(elements) => {
-            if elements.is_empty() {
-                return enc.write_u8(NIL_EXT);
-            }
-            enc.write_u8(LIST_EXT)?;
-            enc.write_u32(elements.len() as u32)?;
-            for elem in elements.iter() {
-                encode_term_vec(enc, elem)?;
-            }
-            enc.write_u8(NIL_EXT)
-        }
-        Term::ImproperList { elements, tail } => {
-            enc.write_u8(LIST_EXT)?;
-            enc.write_u32(elements.len() as u32)?;
-            for elem in elements.iter() {
-                encode_term_vec(enc, elem)?;
-            }
-            encode_term_vec(enc, tail)
-        }
-        Term::Map(pairs) => {
-            enc.write_u8(MAP_EXT)?;
-            enc.write_u32(pairs.len() as u32)?;
-            for (key, value) in pairs.iter() {
-                encode_term_vec(enc, key)?;
-                encode_term_vec(enc, value)?;
-            }
-            Ok(())
-        }
-        Term::Binary(data) => {
-            enc.write_u8(BINARY_EXT)?;
-            enc.write_u32(data.len() as u32)?;
-            enc.write_bytes(data)
-        }
-        Term::BitBinary { bits, data } => {
-            enc.write_u8(BIT_BINARY_EXT)?;
-            enc.write_u32(data.len() as u32)?;
-            enc.write_u8(*bits)?;
-            enc.write_bytes(data)
-        }
-        Term::Pid(p) => {
-            enc.write_u8(p.0)?;
-            enc.write_bytes(p.1)
-        }
-        Term::Port(p) => {
-            enc.write_u8(p.0)?;
-            enc.write_bytes(p.1)
-        }
-        Term::Ref(r) => {
-            enc.write_u8(r.0)?;
-            enc.write_bytes(r.1)
-        }
-        Term::Function(f) => {
-            if f.0 == NEW_FUN_EXT {
-                enc.write_u8(NEW_FUN_EXT)?;
-                enc.write_u32(4u32.wrapping_add(f.1.len() as u32))?;
-                enc.write_bytes(f.1)?;
-            } else {
-                enc.write_u8(f.0)?;
-                enc.write_bytes(f.1)?;
-            }
-            Ok(())
-        }
-        Term::Record(r) => {
-            enc.write_u8(RECORD_EXT)?;
-            enc.write_bytes(r.0)
-        }
     }
 }

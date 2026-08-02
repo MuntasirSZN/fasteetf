@@ -25,14 +25,8 @@ impl<'a> Serialize for Term<'a> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
             Term::Int(v) => serializer.serialize_i32(*v),
-            Term::SmallBigInt { sign, digits } => {
-                let mut s = serializer.serialize_struct("SmallBigInt", 2)?;
-                s.serialize_field("sign", sign)?;
-                s.serialize_field("digits", digits)?;
-                s.end()
-            }
-            Term::LargeBigInt { sign, digits } => {
-                let mut s = serializer.serialize_struct("LargeBigInt", 2)?;
+            Term::BigInt { sign, digits } => {
+                let mut s = serializer.serialize_struct("BigInt", 2)?;
                 s.serialize_field("sign", sign)?;
                 s.serialize_field("digits", digits)?;
                 s.end()
@@ -46,6 +40,7 @@ impl<'a> Serialize for Term<'a> {
                 s.serialize_field("data", data)?;
                 s.end()
             }
+            Term::String(data) => serializer.serialize_bytes(data),
             Term::List(elements) => {
                 let mut seq = serializer.serialize_seq(Some(elements.len()))?;
                 for elem in elements.iter() {
@@ -275,8 +270,16 @@ impl<'de> Visitor<'de> for OwnedTermVisitor {
         if let Ok(n) = i32::try_from(v) {
             Ok(OwnedTerm::Int(n))
         } else {
-            let digits = v.to_le_bytes().to_vec();
-            Ok(OwnedTerm::SmallBigInt { sign: 0, digits })
+            let digits = v.to_le_bytes();
+            let len = digits
+                .iter()
+                .rposition(|&b| b != 0)
+                .map(|i| i + 1)
+                .unwrap_or(1);
+            Ok(OwnedTerm::SmallBigInt {
+                sign: 0,
+                digits: digits[..len].to_vec(),
+            })
         }
     }
 
