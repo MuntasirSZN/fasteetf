@@ -13,22 +13,22 @@
 
 /// Maximum byte length of a `BINARY_EXT` payload (64 MiB).
 ///
-/// Spec: 109 Len(4) Data[Len]
+/// Spec: `109 Len(4) Data[Len]`
 pub const MAX_BINARY_SIZE: usize = 64 * 1024 * 1024;
 
 /// Maximum byte length of a `BIT_BINARY_EXT` payload (64 MiB).
 ///
-/// Spec: 77 Len(4) Bits(1) Data[Len]
+/// Spec: `77 Len(4) Bits(1) Data[Len]`
 pub const MAX_BIT_BINARY_SIZE: usize = 64 * 1024 * 1024;
 
 /// Maximum number of elements in a `LIST_EXT` proper list.
 ///
-/// Spec: 108 Len(4) Elements[Len] Tail
+/// Spec: `108 Len(4) Elements[Len] Tail`
 pub const MAX_LIST_LEN: usize = 1_000_000;
 
 /// Maximum number of key-value pairs in a `MAP_EXT`.
 ///
-/// Spec: 116 Arity(4) K1 V1 … Kn Vn
+/// Spec: `116 Arity(4) K1 V1 … Kn Vn`
 pub const MAX_MAP_LEN: usize = 1_000_000;
 
 /// Maximum byte length for an atom name.
@@ -37,26 +37,26 @@ pub const MAX_MAP_LEN: usize = 1_000_000;
 /// `SMALL_ATOM_UTF8_EXT` uses a 1-byte length (max 255).  This limit
 /// applies uniformly as a safety net.
 ///
-/// Spec: 118 Len(2) AtomName[Len], 119 Len(1) AtomName[Len]
+/// Spec: `118 Len(2) AtomName[Len], 119 Len(1) AtomName[Len]`
 pub const MAX_ATOM_LEN: usize = 65_535;
 
 /// Maximum arity for a `SMALL_TUPLE_EXT` / `LARGE_TUPLE_EXT`.
 ///
-/// Spec: 104 Arity(1) Elem[Arity], 105 Arity(4) Elem[Arity]
+/// Spec: `104 Arity(1) Elem[Arity], 105 Arity(4) Elem[Arity]`
 pub const MAX_TUPLE_ARITY: usize = 1_000_000;
 
 /// Maximum number of elements in a `STRING_EXT` (already bounded by the
 /// 2-byte length field, but we check explicitly for defence in depth).
 ///
-/// Spec: 107 Len(2) Characters[Len]
+/// Spec: `107 Len(2) Characters[Len]`
 pub const MAX_STRING_LEN: usize = 65_535;
 
 /// Maximum number of ID words for a reference.
 ///
 /// `NEWER_REFERENCE_EXT` supports up to 5 words (since OTP 26).
 ///
-/// Spec: 114 Len(2) Node Creation(1) ID[Len×4],
-///       90  Len(2) Node Creation(4) ID[Len×4]
+/// Spec: `114 Len(2) Node Creation(1) ID[Len×4],`
+///        `90 Len(2) Node Creation(4) ID[Len×4]`
 pub const MAX_REFERENCE_WORDS: usize = 5;
 
 /// Maximum nesting depth of compound terms.
@@ -70,7 +70,7 @@ pub const MAX_DEPTH: usize = 128;
 /// bytes of `Size` itself.  After subtracting 4, the remaining bytes are
 /// the function encoding.
 ///
-/// Spec: 112 Size(4) Arity(1) Uniq(16) Index(4) NumFree(4) …
+/// Spec: `112 Size(4) Arity(1) Uniq(16) Index(4) NumFree(4) …`
 pub const MAX_FUN_SIZE: usize = 64 * 1024 * 1024;
 
 // ── Runtime-configurable limits ────────────────────────────────────────────

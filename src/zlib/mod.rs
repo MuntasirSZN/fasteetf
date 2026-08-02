@@ -58,7 +58,7 @@ use crate::error::EtfError;
 /// `miniz_oxide`, `zlib`, `zlib-default`, `zlib-ng-compat`, `zlib-ng`, or
 /// `cloudflare-zlib` Cargo feature. To plug in a custom implementation,
 /// implement this trait and pass the static dispatch function through
-/// [`ParseOptions::zlib_backend`].
+/// [`ParseOptions`](crate::ParseOptions)::zlib_backend.
 ///
 /// # Example
 ///
@@ -120,133 +120,10 @@ pub trait ZlibBackend {
 //
 
 #[cfg(feature = "zlib-rs")]
-mod zlib_rs_impl {
-    use super::EtfError;
-
-    #[inline]
-    pub fn decompress(target: &mut [u8], input: &[u8]) -> Result<(), EtfError> {
-        // `decompress_slice` runs the inflate state machine over `input`
-        // and writes up to `target.len()` bytes.  The `rust-allocator`
-        // feature on zlib-rs is propagated from our `alloc` feature (see
-        // `Cargo.toml`); when `alloc` is off it is not enabled, and the
-        // call below stays heap-free.
-        let (_, rc) = ::zlib_rs::decompress_slice(target, input, Default::default());
-        if rc != ::zlib_rs::ReturnCode::Ok {
-            return Err(EtfError::DecompressionFailed);
-        }
-        Ok(())
-    }
-
-    /// One-shot zlib compression via `zlib-rs`'s streaming `deflate`.
-    ///
-    /// Available only when the `alloc` feature is on, because
-    /// `compress_slice` constructs a `z_stream` that holds a heap-backed
-    /// internal state (the window, hash tables, etc.).  Our `alloc`
-    /// feature propagates `rust-allocator` from zlib-rs, which is the
-    /// allocator the stream uses.
-    #[cfg(feature = "alloc")]
-    #[inline]
-    pub fn compress(target: &mut [u8], input: &[u8]) -> Result<usize, EtfError> {
-        // `compress_slice` writes a zlib-wrapped (header + adler32) deflate
-        // stream into `target` and returns the unused tail of `target`.
-        // The number of compressed bytes is therefore the original
-        // `target` length minus the returned tail's length.
-        let target_len = target.len();
-        let (tail, rc) = ::zlib_rs::compress_slice(target, input, Default::default());
-        if rc != ::zlib_rs::ReturnCode::Ok {
-            return Err(EtfError::CompressionFailed);
-        }
-        Ok(target_len - tail.len())
-    }
-}
+mod zlib_rs_impl;
 
 #[cfg(feature = "miniz_oxide")]
-mod miniz_oxide_impl {
-    use super::EtfError;
-
-    #[inline]
-    pub fn decompress(target: &mut [u8], input: &[u8]) -> Result<(), EtfError> {
-        use miniz_oxide::inflate::stream::InflateState;
-        use miniz_oxide::{DataFormat, MZFlush, MZStatus};
-
-        let mut state = InflateState::new(DataFormat::Zlib);
-
-        // Total bytes written so far into `target`.  The streaming API
-        // hands us a fresh `&mut [u8]` view into the unused tail of
-        // `target` on every call, so we keep an absolute index and a
-        // shorter slice.
-        let mut written: usize = 0;
-        let mut in_off: usize = 0;
-
-        loop {
-            let out_slice = &mut target[written..];
-            let in_slice = &input[in_off..];
-
-            let res = ::miniz_oxide::inflate::stream::inflate(
-                &mut state,
-                in_slice,
-                out_slice,
-                MZFlush::None,
-            );
-
-            written += res.bytes_written;
-            in_off += res.bytes_consumed;
-
-            match res.status {
-                Ok(MZStatus::StreamEnd) => {
-                    // The compressed stream declared its uncompressed
-                    // size up front in the ETF wrapper, and `target`
-                    // was sized to match.  A short or long output here
-                    // indicates corruption.
-                    if written == target.len() {
-                        return Ok(());
-                    }
-                    return Err(EtfError::DecompressionFailed);
-                }
-                Ok(MZStatus::Ok) => {
-                    // The decompressor made forward progress but the
-                    // stream is not yet complete.  In a one-shot call
-                    // with all input supplied, reaching this state
-                    // without the output filling up means the stream
-                    // is truncated or has extra trailing data.
-                    if in_off == input.len() {
-                        return Err(EtfError::DecompressionFailed);
-                    }
-                    // Otherwise loop and keep going.
-                }
-                // Any error is treated as a decompression failure.
-                Err(_) => return Err(EtfError::DecompressionFailed),
-                Ok(_) => return Err(EtfError::DecompressionFailed),
-            }
-        }
-    }
-
-    /// Streaming compression using `miniz_oxide`'s `CompressorOxide`.
-    ///
-    /// Available only when the `alloc` feature is on, because
-    /// `CompressorOxide` embeds a `Box<HuffmanOxide>` for its internal
-    /// Huffman tables and therefore needs the global allocator to be
-    /// available at construction time.  Our `alloc` feature propagates
-    /// `with-alloc` from miniz_oxide.
-    #[cfg(feature = "alloc")]
-    #[inline]
-    pub fn compress(target: &mut [u8], input: &[u8]) -> Result<usize, EtfError> {
-        use miniz_oxide::deflate::core::CompressorOxide;
-        use miniz_oxide::deflate::stream::deflate;
-        use miniz_oxide::{MZFlush, MZStatus};
-
-        // `CompressorOxide::default()` configures the zlib wrapper
-        // (writes a 2-byte zlib header and a 4-byte adler32 trailer).
-        // That is exactly what ETF's COMPRESSED tag expects, so we can
-        // write straight into `target` without manual framing.
-        let mut compressor = CompressorOxide::default();
-        let res = deflate(&mut compressor, input, target, MZFlush::Finish);
-        match res.status {
-            Ok(MZStatus::StreamEnd) => Ok(res.bytes_written),
-            _ => Err(EtfError::CompressionFailed),
-        }
-    }
-}
+mod miniz_oxide_impl;
 
 // All C-based backends share the same C `uncompress` calling convention.
 // `z_size` is `c_ulong` for libz-sys in zlib/zlib-default/zlib-ng-compat
@@ -255,151 +132,13 @@ mod miniz_oxide_impl {
 // libz-sys + cloudflare path and by passing `usize` through directly
 // for libz-ng-sys.
 #[cfg(any(feature = "zlib", feature = "zlib-default", feature = "zlib-ng-compat"))]
-mod libz_sys_impl {
-    use super::EtfError;
-    use core::ffi::{c_int, c_ulong};
-
-    #[inline]
-    pub fn decompress(target: &mut [u8], input: &[u8]) -> Result<(), EtfError> {
-        // `target.len()` is the *expected* uncompressed size, declared
-        // by the ETF stream header.  On success, `uncompress` updates
-        // `out_len` to the actual bytes written.  The function returns
-        // `Z_OK` (0) on success and one of `Z_*_ERROR` otherwise.
-        let mut out_len: c_ulong = target.len() as c_ulong;
-        let rc: c_int = unsafe {
-            ::libz_sys::uncompress(
-                target.as_mut_ptr(),
-                &mut out_len,
-                input.as_ptr(),
-                input.len() as c_ulong,
-            )
-        };
-        if rc != 0 {
-            return Err(EtfError::DecompressionFailed);
-        }
-        Ok(())
-    }
-
-    /// Default compression level for `compress2` (6, equivalent to zlib's
-    /// `Z_DEFAULT_COMPRESSION`).  `libz-sys` does not re-export the
-    /// `Z_DEFAULT_COMPRESSION` constant without its default features, so
-    /// we use the literal value.
-    const Z_DEFAULT_COMPRESSION: c_int = 6;
-
-    #[inline]
-    pub fn compress(target: &mut [u8], input: &[u8]) -> Result<usize, EtfError> {
-        // `compress2` writes a zlib-wrapped deflate stream into `target`
-        // and updates `out_len` to the actual bytes written.  The
-        // function returns `Z_OK` (0) on success and one of the
-        // `Z_*_ERROR` constants otherwise.  We use the default
-        // compression level; a finer-grained level knob can be added
-        // later if needed.
-        let mut out_len: c_ulong = target.len() as c_ulong;
-        let rc: c_int = unsafe {
-            ::libz_sys::compress2(
-                target.as_mut_ptr(),
-                &mut out_len,
-                input.as_ptr(),
-                input.len() as c_ulong,
-                Z_DEFAULT_COMPRESSION,
-            )
-        };
-        if rc != 0 {
-            return Err(EtfError::CompressionFailed);
-        }
-        Ok(out_len as usize)
-    }
-}
+mod libz_sys_impl;
 
 #[cfg(feature = "zlib-ng")]
-mod libz_ng_sys_impl {
-    use super::EtfError;
-    use core::ffi::c_int;
-
-    #[inline]
-    pub fn decompress(target: &mut [u8], input: &[u8]) -> Result<(), EtfError> {
-        // libz-ng-sys uses native `usize` for the size arguments.
-        let mut out_len: usize = target.len();
-        let rc: c_int = unsafe {
-            ::libz_ng_sys::uncompress(
-                target.as_mut_ptr(),
-                &mut out_len,
-                input.as_ptr(),
-                input.len(),
-            )
-        };
-        if rc != 0 {
-            return Err(EtfError::DecompressionFailed);
-        }
-        Ok(())
-    }
-
-    const Z_DEFAULT_COMPRESSION: c_int = 6;
-
-    #[inline]
-    pub fn compress(target: &mut [u8], input: &[u8]) -> Result<usize, EtfError> {
-        // libz-ng-sys uses native `usize` for the size arguments.
-        let mut out_len: usize = target.len();
-        let rc: c_int = unsafe {
-            ::libz_ng_sys::compress2(
-                target.as_mut_ptr(),
-                &mut out_len,
-                input.as_ptr(),
-                input.len(),
-                Z_DEFAULT_COMPRESSION,
-            )
-        };
-        if rc != 0 {
-            return Err(EtfError::CompressionFailed);
-        }
-        Ok(out_len)
-    }
-}
+mod libz_ng_sys_impl;
 
 #[cfg(feature = "cloudflare-zlib")]
-mod cloudflare_zlib_impl {
-    use super::EtfError;
-    use core::ffi::c_int;
-
-    // cloudflare_zlib_sys defines uLong/uLongf as u64 (see its zconf.h).
-    // We use u64 directly rather than c_ulong, which is u32 on Windows.
-    #[inline]
-    pub fn decompress(target: &mut [u8], input: &[u8]) -> Result<(), EtfError> {
-        let mut out_len: u64 = target.len() as u64;
-        let rc: c_int = unsafe {
-            ::cloudflare_zlib_sys::uncompress(
-                target.as_mut_ptr(),
-                &mut out_len,
-                input.as_ptr(),
-                input.len() as u64,
-            )
-        };
-        if rc != 0 {
-            return Err(EtfError::DecompressionFailed);
-        }
-        Ok(())
-    }
-
-    const Z_DEFAULT_COMPRESSION: c_int = 6;
-
-    #[inline]
-    pub fn compress(target: &mut [u8], input: &[u8]) -> Result<usize, EtfError> {
-        let mut out_len: u64 = target.len() as u64;
-        let rc: c_int = unsafe {
-            ::cloudflare_zlib_sys::compress2(
-                target.as_mut_ptr(),
-                &mut out_len,
-                input.as_ptr(),
-                input.len() as u64,
-                Z_DEFAULT_COMPRESSION,
-            )
-        };
-        if rc != 0 {
-            return Err(EtfError::CompressionFailed);
-        }
-        Ok(out_len as usize)
-    }
-}
+mod cloudflare_zlib_impl;
 
 // ── Public dispatch ──────────────────────────────────────────────────────
 //
@@ -414,7 +153,7 @@ mod cloudflare_zlib_impl {
 /// Function pointer type for user-supplied zlib backends.
 ///
 /// A function with this signature can be passed through
-/// [`ParseOptions::zlib_backend`](crate::ParseOptions::zlib_backend) to
+/// [`ParseOptions`](crate::ParseOptions)::zlib_backend to
 /// override the compile-time backend at runtime.
 pub type ZlibDecompressFn = fn(&mut [u8], &[u8]) -> Result<(), EtfError>;
 

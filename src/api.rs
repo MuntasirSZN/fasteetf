@@ -9,13 +9,13 @@
 
 use core::mem::MaybeUninit;
 
+use crate::EtfError;
+use crate::Limits;
 use crate::arena;
 use crate::cursor;
 use crate::parser;
 use crate::tags;
 use crate::zlib;
-use crate::EtfError;
-use crate::Limits;
 
 /// Options passed to [`parse_etf`].
 pub struct ParseOptions<'a> {
@@ -35,7 +35,7 @@ pub struct ParseOptions<'a> {
     #[cfg(feature = "compression")]
     pub decompressed_buffer: Option<&'a mut [u8]>,
     /// Optional runtime zlib backend.  When `Some`, the supplied function
-    /// is used to decompress any [`COMPRESSED`](tags::COMPRESSED) term
+    /// is used to decompress any `COMPRESSED` term
     /// regardless of the compile-time `zlib-*` feature.  When `None`, the
     /// compile-time backend (selected via the `zlib-rs`, `miniz_oxide`,
     /// `zlib`, `zlib-default`, `zlib-ng-compat`, `zlib-ng`, or
@@ -44,7 +44,7 @@ pub struct ParseOptions<'a> {
     /// [`EtfError::UnsupportedTag`].
     ///
     /// Pass `<MyBackend as ZlibBackend>::decompress` to use a custom
-    /// implementation of the [`ZlibBackend`] trait.
+    /// implementation of the [`ZlibBackend`](crate::ZlibBackend) trait.
     #[cfg(feature = "compression")]
     pub zlib_backend: Option<crate::ZlibDecompressFn>,
 }
@@ -57,16 +57,16 @@ pub struct ParseOptions<'a> {
 /// 131 Tag Data…
 /// ```
 ///
-/// where `131` is the magic version byte ([`crate::ETF_MAGIC`]) and `Tag` identifies
+/// where `131` is the magic version byte and `Tag` identifies
 /// the term type.  See the module-level documentation on each tag for the
 /// full format reference.
 ///
 /// ## Compression
 ///
-/// When the input starts with `131 80` (the [`COMPRESSED`] tag) followed by
+/// When the input starts with `131 80` (the `COMPRESSED` tag) followed by
 /// a 4-byte big-endian uncompressed size and a zlib-compressed payload, this
 /// function transparently decompresses using the caller-supplied
-/// [`ParseOptions::decompressed_buffer`].
+/// `ParseOptions::decompressed_buffer`.
 ///
 /// ## Zero-copy
 ///
@@ -78,7 +78,7 @@ pub struct ParseOptions<'a> {
 /// Returns [`EtfError`] on malformed input, unsupported tags, arena
 /// exhaustion, or decompression failure.
 ///
-/// Spec: https://www.erlang.org/doc/apps/erts/erl_ext_dist
+/// Spec: <https://www.erlang.org/doc/apps/erts/erl_ext_dist>
 pub fn parse_etf<'a>(options: ParseOptions<'a>) -> Result<crate::Term<'a>, EtfError> {
     let mut cursor = cursor::Cursor::new(options.input);
 

@@ -76,28 +76,22 @@ pub enum EtfError {
     #[error("invalid magic number (expected 131)")]
     InvalidMagicNumber,
 
-    /// The input is compressed but no [`decompressed_buffer`] was supplied,
+    /// The input is compressed but no `decompressed_buffer` was supplied,
     /// or the supplied buffer is too small.
-    ///
-    /// [`decompressed_buffer`]: crate::ParseOptions::decompressed_buffer
     #[error("decompression buffer missing or too small")]
     InsufficientDecompressionBuffer,
 
-    /// Zlib decompression of a [`COMPRESSED`] wrapper failed.
-    ///
-    /// [`COMPRESSED`]: crate::tags::COMPRESSED
+    /// Zlib decompression of a `COMPRESSED` wrapper failed.
     #[error("zlib decompression failed")]
     DecompressionFailed,
 
-    /// Zlib compression (e.g. inside [`encode_to_compressed`]) failed.
+    /// Zlib compression (e.g. inside `encode_to_compressed`) failed.
     ///
     /// The most common cause is an output buffer that is too small to
     /// hold the compressed payload — `compressBound` is a good upper
     /// bound to size it.  Backend-level errors (e.g. an `alloc`-less
     /// pure-Rust backend with no allocator configured) also surface
     /// here.
-    ///
-    /// [`encode_to_compressed`]: crate::encode_to_compressed
     #[error("zlib compression failed")]
     CompressionFailed,
 
@@ -115,16 +109,12 @@ pub enum EtfError {
     #[error("invalid UTF-8")]
     InvalidUtf8,
 
-    /// A legacy [`FLOAT_EXT`] string could not be parsed as an `f64`.
-    ///
-    /// [`FLOAT_EXT`]: crate::tags::FLOAT_EXT
+    /// A legacy `FLOAT_EXT` string could not be parsed as an `f64`.
     #[error("invalid float encoding")]
     InvalidFloat,
 
     /// A length or size field contained a physically impossible value
-    /// (e.g. a [`NEW_FUN_EXT`] size < 4).
-    ///
-    /// [`NEW_FUN_EXT`]: crate::tags::NEW_FUN_EXT
+    /// (e.g. a `NEW_FUN_EXT` size < 4).
     #[error("invalid size field")]
     InvalidSize,
 

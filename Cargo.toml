@@ -178,28 +178,35 @@ required-features = ["std"]
 
 [[test]]
 name = "parse"
+path = "tests/parse/mod.rs"
 required-features = ["alloc"]
 
 [[test]]
 name = "encoding"
+path = "tests/encoding/mod.rs"
 required-features = ["alloc"]
 
 [[test]]
 name = "compression"
+path = "tests/compression/mod.rs"
 required-features = ["alloc", "compression"]
 
 [[test]]
 name = "streaming"
+path = "tests/streaming/mod.rs"
 required-features = ["alloc"]
 
 [[test]]
 name = "visitor"
+path = "tests/visitor/mod.rs"
 required-features = ["alloc"]
 
 [[test]]
 name = "serde"
+path = "tests/serde/mod.rs"
 required-features = ["serde"]
 
 [[test]]
 name = "proptest"
+path = "tests/proptest.rs"
 required-features = ["alloc"]

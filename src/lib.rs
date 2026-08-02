@@ -45,7 +45,7 @@ mod error;
 mod limits;
 mod parser;
 #[cfg(feature = "serde")]
-mod serde_impl;
+mod serde;
 mod simd;
 mod tags;
 mod types;

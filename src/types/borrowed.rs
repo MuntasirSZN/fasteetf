@@ -14,8 +14,8 @@ use crate::simd::simd_eq;
 /// | Tag(s) | Variant |
 /// |---|---|
 /// | `SMALL_INTEGER_EXT`, `INTEGER_EXT` | [`Int`] |
-/// | `SMALL_BIG_EXT` | [`SmallBigInt`] |
-/// | `LARGE_BIG_EXT` | [`LargeBigInt`] |
+/// | `SMALL_BIG_EXT` | [`BigInt`] |
+/// | `LARGE_BIG_EXT` | [`BigInt`] |
 /// | `NEW_FLOAT_EXT`, `FLOAT_EXT` | [`Float`] |
 /// | `ATOM_UTF8_EXT`, `SMALL_ATOM_UTF8_EXT` | [`Atom`] |
 /// | `SMALL_TUPLE_EXT`, `LARGE_TUPLE_EXT` | [`Tuple`] |
@@ -33,8 +33,7 @@ use crate::simd::simd_eq;
 /// | `RECORD_EXT` | [`Record`] |
 ///
 /// [`Int`]: Term::Int
-/// [`SmallBigInt`]: Term::SmallBigInt
-/// [`LargeBigInt`]: Term::LargeBigInt
+/// [`BigInt`]: Term::BigInt
 /// [`Float`]: Term::Float
 /// [`Atom`]: Term::Atom
 /// [`Tuple`]: Term::Tuple
