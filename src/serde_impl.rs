@@ -399,6 +399,12 @@ impl<'de> Visitor<'de> for TaggedOpaqueVisitor {
 
 macro_rules! impl_tagged_deser {
     ($owned:ty) => {
+        impl Serialize for $owned {
+            fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                serializer.serialize_bytes(&self.0)
+            }
+        }
+
         impl<'de> Deserialize<'de> for $owned {
             fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
                 let bytes: Vec<u8> = deserializer.deserialize_bytes(TaggedOpaqueVisitor)?;

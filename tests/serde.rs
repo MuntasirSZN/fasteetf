@@ -529,23 +529,20 @@ fn test_serde_term_serialize_port() {
 
 #[test]
 fn test_serde_term_serialize_ref() {
-    let data = [0u8; 4];
     let term = Term::Ref(&[114u8, 1, 2, 3]);
     let json = serde_json::to_string(&term).unwrap();
-    assert!(json.contains("\"tag\":114"));
+    assert_eq!(json, "[114,1,2,3]");
 }
 
 #[test]
 fn test_serde_term_serialize_function() {
-    let data = [0u8; 4];
     let term = Term::Function(&[113u8, 1, 2, 3]);
     let json = serde_json::to_string(&term).unwrap();
-    assert!(json.contains("\"tag\":113"));
+    assert_eq!(json, "[113,1,2,3]");
 }
 
 #[test]
 fn test_serde_term_serialize_record() {
-    let data = [1u8, 2, 3, 4];
     let term = Term::Record(&[1, 2, 3, 4]);
     let json = serde_json::to_string(&term).unwrap();
     assert_eq!(json, "[1,2,3,4]");
@@ -571,8 +568,7 @@ fn test_serde_pid_owned_roundtrip() {
     let pid = PidOwned(vec![1, 2, 3, 4]);
     let json = serde_json::to_string(&pid).unwrap();
     let de: PidOwned = serde_json::from_str(&json).unwrap();
-    assert_eq!(de.0, 103);
-    assert_eq!(de.1, vec![1, 2, 3, 4]);
+    assert_eq!(de.0, vec![1, 2, 3, 4]);
 }
 
 #[test]
@@ -581,8 +577,7 @@ fn test_serde_port_owned_roundtrip() {
     let port = PortOwned(vec![5, 6, 7, 8]);
     let json = serde_json::to_string(&port).unwrap();
     let de: PortOwned = serde_json::from_str(&json).unwrap();
-    assert_eq!(de.0, 102);
-    assert_eq!(de.1, vec![5, 6, 7, 8]);
+    assert_eq!(de.0, vec![5, 6, 7, 8]);
 }
 
 #[test]
@@ -591,8 +586,7 @@ fn test_serde_ref_owned_roundtrip() {
     let r = ReferenceOwned(vec![9, 10, 11, 12]);
     let json = serde_json::to_string(&r).unwrap();
     let de: ReferenceOwned = serde_json::from_str(&json).unwrap();
-    assert_eq!(de.0, 114);
-    assert_eq!(de.1, vec![9, 10, 11, 12]);
+    assert_eq!(de.0, vec![9, 10, 11, 12]);
 }
 
 #[test]
@@ -601,8 +595,7 @@ fn test_serde_function_owned_roundtrip() {
     let f = FunctionOwned(vec![13, 14, 15]);
     let json = serde_json::to_string(&f).unwrap();
     let de: FunctionOwned = serde_json::from_str(&json).unwrap();
-    assert_eq!(de.0, 113);
-    assert_eq!(de.1, vec![13, 14, 15]);
+    assert_eq!(de.0, vec![13, 14, 15]);
 }
 
 #[test]
@@ -627,24 +620,22 @@ fn test_serde_record_owned_from_seq() {
 #[test]
 fn test_serde_pid_owned_missing_field() {
     use fasteetf::owned::PidOwned;
-    // Only data, no tag.
-    let err = serde_json::from_str::<PidOwned>("{\"data\":[1,2,3]}").unwrap_err();
-    assert!(format!("{err}").contains("tag") || format!("{err}").contains("missing"));
+    let err = serde_json::from_str::<PidOwned>("\"not-bytes\"").unwrap_err();
+    assert!(format!("{err}").contains("invalid"));
 }
 
 #[test]
 fn test_serde_pid_owned_unknown_field() {
     use fasteetf::owned::PidOwned;
-    let err =
-        serde_json::from_str::<PidOwned>("{\"tag\":103,\"data\":[1],\"extra\":42}").unwrap_err();
-    assert!(format!("{err}").contains("extra") || format!("{err}").contains("unknown"));
+    let err = serde_json::from_str::<PidOwned>("{\"extra\":42}").unwrap_err();
+    assert!(format!("{err}").contains("invalid"));
 }
 
 #[test]
 fn test_serde_port_owned_missing_data() {
     use fasteetf::owned::PortOwned;
     let err = serde_json::from_str::<PortOwned>("{\"tag\":102}").unwrap_err();
-    assert!(format!("{err}").contains("data") || format!("{err}").contains("missing"));
+    assert!(format!("{err}").contains("invalid"));
 }
 
 // ── Term / Pid / Port / Reference / Function borrowed Serialize paths ───────
@@ -652,42 +643,38 @@ fn test_serde_port_owned_missing_data() {
 #[test]
 fn test_serde_borrowed_pid() {
     let data = [1u8, 2, 3, 4, 5, 6, 7, 8, 9];
-    let term = Term::Pid(Pid(103, &data));
+    let term = Term::Pid(&data);
     let json = serde_json::to_string(&term).unwrap();
-    assert!(json.contains("\"tag\":103"));
-    assert!(json.contains("\"data\":[1,2,3,4,5,6,7,8,9]"));
+    assert_eq!(json, "[1,2,3,4,5,6,7,8,9]");
 }
 
 #[test]
 fn test_serde_borrowed_port() {
     let data = [1u8, 2, 3, 4, 5];
-    let term = Term::Port(Port(102, &data));
+    let term = Term::Port(&data);
     let json = serde_json::to_string(&term).unwrap();
-    assert!(json.contains("\"tag\":102"));
+    assert_eq!(json, "[1,2,3,4,5]");
 }
 
 #[test]
 fn test_serde_borrowed_reference() {
-    let data = [1u8, 2, 3, 4];
     let term = Term::Ref(&[114u8, 1, 2, 3]);
     let json = serde_json::to_string(&term).unwrap();
-    assert!(json.contains("\"tag\":114"));
+    assert_eq!(json, "[114,1,2,3]");
 }
 
 #[test]
 fn test_serde_borrowed_function() {
-    let data = [1u8, 2, 3];
     let term = Term::Function(&[113u8, 1, 2, 3]);
     let json = serde_json::to_string(&term).unwrap();
-    assert!(json.contains("\"tag\":113"));
+    assert_eq!(json, "[113,1,2,3]");
 }
 
 #[test]
 fn test_serde_borrowed_record() {
-    let data = [1u8, 2, 3];
     let term = Term::Record(&[1, 2, 3, 4]);
     let json = serde_json::to_string(&term).unwrap();
-    assert_eq!(json, "[1,2,3]");
+    assert_eq!(json, "[1,2,3,4]");
 }
 
 // ── Visitor visit_* methods: drive each via a typed deserializer ───────────
