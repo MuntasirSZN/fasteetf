@@ -382,6 +382,15 @@ fn zlib_rs_decompress(target: &mut [u8], input: &[u8]) -> Result<(), EtfError> {
 }
 
 #[cfg(not(miri))]
+#[cfg(any(
+    all(feature = "zlib-rs", feature = "alloc"),
+    all(feature = "miniz_oxide", feature = "alloc"),
+    feature = "zlib",
+    feature = "zlib-default",
+    feature = "zlib-ng-compat",
+    feature = "zlib-ng",
+    feature = "cloudflare-zlib",
+))]
 #[test]
 fn encode_to_compressed_roundtrip_with_compile_time_backend() {
     let term = Term::Int(42);
@@ -450,6 +459,15 @@ fn encode_to_compressed_roundtrip_with_runtime_backend() {
 }
 
 #[cfg(not(miri))]
+#[cfg(any(
+    all(feature = "zlib-rs", feature = "alloc"),
+    all(feature = "miniz_oxide", feature = "alloc"),
+    feature = "zlib",
+    feature = "zlib-default",
+    feature = "zlib-ng-compat",
+    feature = "zlib-ng",
+    feature = "cloudflare-zlib",
+))]
 #[test]
 fn encode_to_compressed_uncompressed_size_matches_encoded_term() {
     // Build a more interesting term so the uncompressed size is not
