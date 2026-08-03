@@ -1,5 +1,5 @@
 use crate::error::EtfError;
-use core::ffi::{c_int, c_ulong};
+use core::ffi::c_int;
 
 #[inline]
 pub(crate) fn decompress(target: &mut [u8], input: &[u8]) -> Result<(), EtfError> {
@@ -7,13 +7,16 @@ pub(crate) fn decompress(target: &mut [u8], input: &[u8]) -> Result<(), EtfError
     // by the ETF stream header.  On success, `uncompress` updates
     // `out_len` to the actual bytes written.  The function returns
     // `Z_OK` (0) on success and one of `Z_*_ERROR` otherwise.
-    let mut out_len: c_ulong = target.len() as c_ulong;
+    // `libz-sys` uses an internal size type that can vary by backend
+    // (`unsigned long` for zlib/compat, `size_t` for some zlib-ng builds).
+    // Keep these as inferred FFI size values to avoid ABI mismatches.
+    let mut out_len = target.len() as _;
     let rc: c_int = unsafe {
         ::libz_sys::uncompress(
             target.as_mut_ptr(),
             &mut out_len,
             input.as_ptr(),
-            input.len() as c_ulong,
+            input.len() as _,
         )
     };
     if rc != 0 {
@@ -36,13 +39,13 @@ pub(crate) fn compress(target: &mut [u8], input: &[u8]) -> Result<usize, EtfErro
     // `Z_*_ERROR` constants otherwise.  We use the default
     // compression level; a finer-grained level knob can be added
     // later if needed.
-    let mut out_len: c_ulong = target.len() as c_ulong;
+    let mut out_len = target.len() as _;
     let rc: c_int = unsafe {
         ::libz_sys::compress2(
             target.as_mut_ptr(),
             &mut out_len,
             input.as_ptr(),
-            input.len() as c_ulong,
+            input.len() as _,
             Z_DEFAULT_COMPRESSION,
         )
     };
