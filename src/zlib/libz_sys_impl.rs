@@ -6,12 +6,19 @@ pub(crate) fn decompress(target: &mut [u8], input: &[u8]) -> Result<(), EtfError
     // `target.len()` is the *expected* uncompressed size, declared
     // by the ETF stream header.  On success, `uncompress` updates
     // `out_len` to the actual bytes written.  The function returns
-    // `Z_OK` (0) on success and one of `Z_*_ERROR` otherwise.
-    let mut out_len: c_ulong = target.len() as c_ulong;
+    // `Z_OK` (0) on success and one of the `Z_*_ERROR` otherwise.
+    //
+    // `out_len` is a 64-bit slot even though the binding types it as
+    // `c_ulong` (32-bit on Windows): stock zlib's `uLongf` is 32-bit
+    // there while a cloudflare-zlib build linked into the same binary
+    // uses a 64-bit `z_size_t`.  A 32-bit implementation reads and
+    // writes only the low half of the slot, so both ABIs see the
+    // correct capacity and cannot overrun the caller's buffer.
+    let mut out_len: usize = target.len();
     let rc: c_int = unsafe {
         ::libz_sys::uncompress(
             target.as_mut_ptr(),
-            &mut out_len,
+            &mut out_len as *mut usize as *mut c_ulong,
             input.as_ptr(),
             input.len() as c_ulong,
         )
@@ -36,11 +43,15 @@ pub(crate) fn compress(target: &mut [u8], input: &[u8]) -> Result<usize, EtfErro
     // `Z_*_ERROR` constants otherwise.  We use the default
     // compression level; a finer-grained level knob can be added
     // later if needed.
-    let mut out_len: c_ulong = target.len() as c_ulong;
+    //
+    // `out_len` uses the same 64-bit slot as `decompress` above so
+    // that both stock zlib's 32-bit `uLongf` and cloudflare-zlib's
+    // 64-bit `z_size_t` agree on the buffer capacity.
+    let mut out_len: usize = target.len();
     let rc: c_int = unsafe {
         ::libz_sys::compress2(
             target.as_mut_ptr(),
-            &mut out_len,
+            &mut out_len as *mut usize as *mut c_ulong,
             input.as_ptr(),
             input.len() as c_ulong,
             Z_DEFAULT_COMPRESSION,
@@ -49,7 +60,7 @@ pub(crate) fn compress(target: &mut [u8], input: &[u8]) -> Result<usize, EtfErro
     if rc != 0 {
         return Err(EtfError::CompressionFailed);
     }
-    Ok(out_len as usize)
+    Ok(out_len)
 }
 
 #[cfg(test)]
