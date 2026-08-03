@@ -1,6 +1,9 @@
 use super::*;
 use core::mem::MaybeUninit;
 
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_test::wasm_bindgen_test as test;
+
 // ── Streaming EOF paths: exercise Cursor::take/read_u16/read_u32/read_f64 EOF branches ─
 
 #[test]

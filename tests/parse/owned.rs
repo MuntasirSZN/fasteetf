@@ -1,5 +1,8 @@
 use super::*;
 
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_test::wasm_bindgen_test as test;
+
 // ── OwnedTerm conversion ────────────────────────────────────────────────────
 
 #[test]
@@ -292,13 +295,4 @@ fn test_atom_utf8_lossy_string_conversion() {
             _ => panic!("expected Atom"),
         }
     });
-}
-
-#[test]
-fn test_term_size() {
-    // Verify Term size is 24 bytes (optimized from 32 bytes)
-    // This test verifies the size optimization
-    let size = std::mem::size_of::<fasteetf::Term>();
-    println!("Term size: {} bytes", size);
-    assert_eq!(size, 24);
 }

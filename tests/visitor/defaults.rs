@@ -1,5 +1,8 @@
 use super::*;
 
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_test::wasm_bindgen_test as test;
+
 // ── Default trait methods: a visitor that overrides nothing ─────────────────
 
 /// A visitor that overrides no methods.  Every call falls through to the

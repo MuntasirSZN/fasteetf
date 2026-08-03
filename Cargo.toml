@@ -141,7 +141,6 @@ cloudflare-zlib = ["dep:cloudflare-zlib-sys"]
 [dependencies]
 serde_core = { version = "1", default-features = false, optional = true }
 thiserror = { version = "2", default-features = false }
-cpufeatures = "0.3"  # Runtime CPU feature detection for SIMD
 
 # Built-in zlib backends.  Selecting more than one is allowed; see
 # `src/zlib.rs` for the dispatch priority.  None of these backends
@@ -159,9 +158,20 @@ libz-sys = { version = "1.1.20", default-features = false, features = ["libc"], 
 libz-ng-sys = { version = "1.1.16", default-features = false, optional = true }
 cloudflare-zlib-sys = { version = "0.3.6", optional = true }
 
-[dev-dependencies]
+# Runtime CPU feature detection for x86_64 SIMD.  Wasm/aarch64 SIMD is
+# compile-time (`target_feature`), so this target-specific dep is not
+# built on those platforms.
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+cpufeatures = "0.3"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 divan = { version = "5.0.1", package = "codspeed-divan-compat" }
 proptest = "1"
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[dev-dependencies]
 serde_json = "1"
 # Used by integration tests to construct zlib-compressed ETF fixtures
 # and to provide an out-of-the-box custom ZlibBackend implementation.

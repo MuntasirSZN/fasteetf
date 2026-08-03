@@ -1,6 +1,9 @@
 use super::*;
 use core::mem::MaybeUninit;
 
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_test::wasm_bindgen_test as test;
+
 #[test]
 fn test_streaming_incomplete() {
     // Feed the magic byte only — the parser should demand at least 1 more.

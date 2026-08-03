@@ -1,6 +1,6 @@
 # justfile for changelogen-rs development
 
-tools := "cargo-nextest cargo-deny cargo-llvm-cov cargo-hack"
+tools := "cargo-nextest cargo-deny cargo-llvm-cov cargo-hack wasm-pack"
 
 # Commands
 
@@ -60,6 +60,12 @@ test:
 # Run tests without doc tests
 test-fast:
     {{ nextest }}
+
+# Run wasm32 tests in Node via wasm-pack (requires node + wasm-pack installed)
+test-wasm:
+    wasm-pack test --node
+    @echo "{{ CYAN + UNDERLINE }}[INFO]{{ NORMAL }} {{ GREEN + BOLD }}Now doing with SIMD enabled{{ NORMAL }}"
+    RUSTFLAGS="-Ctarget-feature=+simd128" wasm-pack test --node
 
 # Run tests with ASAN (requires nightly + clang/llvm)
 asan-test:

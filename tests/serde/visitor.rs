@@ -1,5 +1,8 @@
 // ── Visitor visit_* methods: drive each via a typed deserializer ───────────
 
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_test::wasm_bindgen_test as test;
+
 #[test]
 fn test_serde_ownedterm_visit_i8() {
     // Use serde_json with a small JSON value.  Numbers go through visit_i64

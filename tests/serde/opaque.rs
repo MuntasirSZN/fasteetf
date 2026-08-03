@@ -1,5 +1,8 @@
 // ── Opaque owned wrappers: serialize + deserialize roundtrip ───────────────
 
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_test::wasm_bindgen_test as test;
+
 #[test]
 fn test_serde_pid_owned_roundtrip() {
     use fasteetf::owned::PidOwned;

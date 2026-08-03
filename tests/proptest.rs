@@ -5,6 +5,7 @@
 // back, and asserts the result matches.
 // ─────────────────────────────────────────────────────────────────────────────
 
+#![cfg(not(target_arch = "wasm32"))]
 #![cfg(feature = "alloc")]
 
 mod common;

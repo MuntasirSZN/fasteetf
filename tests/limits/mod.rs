@@ -11,6 +11,9 @@ use common::*;
 use core::mem::MaybeUninit;
 use fasteetf::*;
 
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_test::wasm_bindgen_test as test;
+
 /// Parse `input` with a custom `Limits`, returning the error.
 fn parse_err_with_limits(input: &[u8], limits: Limits) -> EtfError {
     let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];

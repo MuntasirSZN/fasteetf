@@ -4,13 +4,17 @@
 // Comprehensive SIMD support:
 // - x86_64: SSE2, SSE3, SSSE3, SSE4.1, SSE4.2, AVX, AVX2, AVX-512
 // - aarch64: NEON (ASIMD) - always available on aarch64
+// - wasm32: SIMD128 - compile-time only, requires `-C target-feature=+simd128`
 //
-// Uses `core::arch` with runtime CPU feature detection via `cpufeatures`.
+// x86_64 uses `core::arch` with runtime CPU feature detection via `cpufeatures`.
+// aarch64 and wasm32 use compile-time detection via `target_feature`.
 // Falls back to scalar code when SIMD is not available.
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[cfg(target_arch = "aarch64")]
 use core::arch::aarch64::*;
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+use core::arch::wasm32::*;
 #[cfg(target_arch = "x86_64")]
 use core::arch::x86_64::*;
 #[cfg(target_arch = "x86_64")]
@@ -179,18 +183,81 @@ pub(crate) unsafe fn simd_copy(dst: *mut u8, src: *const u8, len: usize) {
     }
 }
 
-/// Scalar fallback for simd_eq (non-x86_64, non-aarch64).
-#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+/// Compare two byte slices for equality using SIMD128 (wasm32).
+///
+/// Compile-time only: this path is compiled when the `simd128` target
+/// feature is enabled (e.g. `-C target-feature=+simd128`); there is no
+/// runtime detection on wasm.
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[inline(always)]
+pub(crate) fn simd_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let len = a.len();
+    if len == 0 {
+        return true;
+    }
+
+    // SIMD128: 16 bytes at a time, then the scalar tail
+    let mut i = 0usize;
+    unsafe {
+        while i + 16 <= len {
+            let a_simd = v128_load(a.as_ptr().add(i) as *const v128);
+            let b_simd = v128_load(b.as_ptr().add(i) as *const v128);
+            if v128_any_true(v128_not(i8x16_eq(a_simd, b_simd))) {
+                return false;
+            }
+            i += 16;
+        }
+    }
+    a[i..] == b[i..]
+}
+
+/// Copy bytes using SIMD128 (wasm32).
+///
+/// Compile-time only: see `simd_eq` above.
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[inline(always)]
+pub(crate) unsafe fn simd_copy(dst: *mut u8, src: *const u8, len: usize) {
+    unsafe {
+        let mut i = 0usize;
+
+        // SIMD128: 16 bytes at a time
+        while i + 16 <= len {
+            let src_simd = v128_load(src.add(i) as *const v128);
+            v128_store(dst.add(i) as *mut v128, src_simd);
+            i += 16;
+        }
+
+        // Copy remaining bytes
+        if i < len {
+            core::ptr::copy_nonoverlapping(src.add(i), dst.add(i), len - i);
+        }
+    }
+}
+
+/// Scalar fallback for simd_eq (non-x86_64, non-aarch64, non-SIMD128-wasm32).
+#[cfg(not(any(
+    target_arch = "x86_64",
+    target_arch = "aarch64",
+    all(target_arch = "wasm32", target_feature = "simd128")
+)))]
 #[inline(always)]
 pub(crate) fn simd_eq(a: &[u8], b: &[u8]) -> bool {
     a == b
 }
 
-/// Scalar fallback for simd_copy (non-x86_64, non-aarch64).
-#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+/// Scalar fallback for simd_copy (non-x86_64, non-aarch64, non-SIMD128-wasm32).
+#[cfg(not(any(
+    target_arch = "x86_64",
+    target_arch = "aarch64",
+    all(target_arch = "wasm32", target_feature = "simd128")
+)))]
 #[inline(always)]
 pub(crate) unsafe fn simd_copy(dst: *mut u8, src: *const u8, len: usize) {
-    core::ptr::copy_nonoverlapping(src, dst, len);
+    // SAFETY: caller guarantees dst/src are valid for len bytes.
+    unsafe { core::ptr::copy_nonoverlapping(src, dst, len) };
 }
 
 // ── Unit tests ──────────────────────────────────────────────────────────────
