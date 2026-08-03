@@ -116,7 +116,7 @@ pub(crate) fn simd_eq(a: &[u8], b: &[u8]) -> bool {
             i += 16;
         }
     }
-    &a[i..] == &b[i..]
+    a[i..] == b[i..]
 }
 
 /// Copy bytes using SIMD (x86_64).
