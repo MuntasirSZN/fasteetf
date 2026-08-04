@@ -296,3 +296,46 @@ fn test_atom_utf8_lossy_string_conversion() {
         }
     });
 }
+
+// ── Equality & hashing (derived impls) ──────────────────────────────────────
+
+#[test]
+fn test_term_eq_and_hash_consistency() {
+    let wire = [131, 104, 2, 97, 1, 97, 2]; // {1, 2}
+    with_parse(&wire, |t1| {
+        with_parse(&wire, |t2| {
+            assert_eq!(t1, t2);
+            let mut set = std::collections::HashSet::new();
+            set.insert(t1);
+            assert!(!set.insert(t2), "equal terms must hash identically");
+            assert_eq!(set.len(), 1);
+        });
+        assert_ne!(t1, Term::Int(1));
+    });
+}
+
+#[test]
+fn test_owned_term_eq_and_hash_dedup() {
+    let wire = [131, 104, 2, 97, 1, 97, 2]; // {1, 2}
+    let t1 = with_parse(&wire, |t| OwnedTerm::from(t));
+    let t2 = with_parse(&wire, |t| OwnedTerm::from(t));
+    assert_eq!(t1, t2);
+    let mut set = std::collections::HashSet::new();
+    set.insert(t1);
+    assert!(!set.insert(t2));
+    assert_eq!(set.len(), 1);
+}
+
+#[test]
+fn test_float_total_equality() {
+    // -0.0 == 0.0 (IEEE), and all NaNs are equal so Eq/Hash stay consistent.
+    assert_eq!(Term::Float(0.0), Term::Float(-0.0));
+    assert_eq!(Term::Float(f64::NAN), Term::Float(f64::NAN));
+    assert_ne!(Term::Float(1.0), Term::Float(f64::NAN));
+    let mut set = std::collections::HashSet::new();
+    set.insert(Term::Float(f64::NAN));
+    assert!(!set.insert(Term::Float(-f64::NAN)));
+    assert!(set.insert(Term::Float(0.0)));
+    assert!(!set.insert(Term::Float(-0.0)));
+    assert_eq!(set.len(), 2);
+}

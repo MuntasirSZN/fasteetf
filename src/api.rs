@@ -49,6 +49,25 @@ pub struct ParseOptions<'a> {
     pub zlib_backend: Option<crate::ZlibDecompressFn>,
 }
 
+// Manual Debug: `ast_arena` is `&mut [MaybeUninit<u8>]`, which has no Debug,
+// so this prints the field sizes instead of the buffers themselves.
+impl core::fmt::Debug for ParseOptions<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut d = f.debug_struct("ParseOptions");
+        d.field("input_len", &self.input.len())
+            .field("ast_arena_len", &self.ast_arena.len())
+            .field("limits", &self.limits);
+        #[cfg(feature = "compression")]
+        d.field(
+            "decompressed_buffer_len",
+            &self.decompressed_buffer.as_ref().map(|b| b.len()),
+        );
+        #[cfg(feature = "compression")]
+        d.field("zlib_backend", &self.zlib_backend);
+        d.finish()
+    }
+}
+
 /// Parse an ETF-encoded term from a complete input buffer.
 ///
 /// The wire format is:

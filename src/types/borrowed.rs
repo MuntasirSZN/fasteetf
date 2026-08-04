@@ -4,6 +4,8 @@
 // These types borrow from the input buffer and require no heap allocation.
 // ─────────────────────────────────────────────────────────────────────────────
 
+use core::hash::Hash;
+
 use crate::simd::simd_eq;
 
 /// A decoded Erlang term.  The lifetime `'a` is tied to the input buffer (or
@@ -98,6 +100,105 @@ pub enum Term<'a> {
     Function(&'a [u8]),
     /// A native record (spec: `RECORD_EXT`, OTP 29.0).
     Record(&'a [u8]),
+}
+
+// ── Equality & hashing ──────────────────────────────────────────────────────
+//
+// Manual impls instead of derives because `Term::Float` holds an `f64`,
+// and std deliberately omits `Eq`/`Hash` for floats (IEEE `PartialEq` is
+// not reflexive for NaN, so no `Hash` can be consistent with it).
+//
+// We use *total* float semantics: `-0.0 == 0.0` (as IEEE requires) and all
+// NaNs compare equal to each other.  This keeps `Eq` reflexive and makes
+// `Hash` implementable.  The alternative — IEEE `PartialEq` with no
+// `Eq`/`Hash` — would make `Term` unusable in `HashSet`/`HashMap`.
+
+/// Total float equality: IEEE equality, except all NaNs compare equal.
+#[inline]
+pub(crate) fn float_eq(a: f64, b: f64) -> bool {
+    a == b || (a.is_nan() && b.is_nan())
+}
+
+/// Hash for total float equality: `-0.0` normalizes to `0.0` and all NaNs
+/// share one bit pattern.
+#[inline]
+pub(crate) fn hash_f64<H: core::hash::Hasher>(x: f64, state: &mut H) {
+    let bits = if x == 0.0 {
+        0u64 // both -0.0 and 0.0
+    } else if x.is_nan() {
+        f64::NAN.to_bits() // all NaNs hash identically
+    } else {
+        x.to_bits()
+    };
+    bits.hash(state);
+}
+
+impl<'a> PartialEq for Term<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Atom(a), Self::Atom(b)) => a == b,
+            (Self::Int(a), Self::Int(b)) => a == b,
+            (
+                Self::BigInt { sign, digits },
+                Self::BigInt {
+                    sign: b_sign,
+                    digits: b_digits,
+                },
+            ) => sign == b_sign && digits == b_digits,
+            (Self::Float(a), Self::Float(b)) => float_eq(*a, *b),
+            (Self::Binary(a), Self::Binary(b)) => a == b,
+            (
+                Self::BitBinary { bits, data },
+                Self::BitBinary {
+                    bits: b_bits,
+                    data: b_data,
+                },
+            ) => bits == b_bits && data == b_data,
+            (Self::String(a), Self::String(b)) => a == b,
+            (Self::List(a), Self::List(b)) => a == b,
+            (Self::ImproperList(a), Self::ImproperList(b)) => a == b,
+            (Self::Tuple(a), Self::Tuple(b)) => a == b,
+            (Self::Map(a), Self::Map(b)) => a == b,
+            (Self::Pid(a), Self::Pid(b)) => a == b,
+            (Self::Port(a), Self::Port(b)) => a == b,
+            (Self::Ref(a), Self::Ref(b)) => a == b,
+            (Self::Function(a), Self::Function(b)) => a == b,
+            (Self::Record(a), Self::Record(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl<'a> Eq for Term<'a> {}
+
+impl<'a> core::hash::Hash for Term<'a> {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        core::mem::discriminant(self).hash(state);
+        match self {
+            Self::Atom(a) => a.hash(state),
+            Self::Int(a) => a.hash(state),
+            Self::BigInt { sign, digits } => {
+                sign.hash(state);
+                digits.hash(state);
+            }
+            Self::Float(a) => hash_f64(*a, state),
+            Self::Binary(a) => a.hash(state),
+            Self::BitBinary { bits, data } => {
+                bits.hash(state);
+                data.hash(state);
+            }
+            Self::String(a) => a.hash(state),
+            Self::List(a) => a.hash(state),
+            Self::ImproperList(a) => a.hash(state),
+            Self::Tuple(a) => a.hash(state),
+            Self::Map(a) => a.hash(state),
+            Self::Pid(a) => a.hash(state),
+            Self::Port(a) => a.hash(state),
+            Self::Ref(a) => a.hash(state),
+            Self::Function(a) => a.hash(state),
+            Self::Record(a) => a.hash(state),
+        }
+    }
 }
 
 /// A UTF-8 atom that defers validation.

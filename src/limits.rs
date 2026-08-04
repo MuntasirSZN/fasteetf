@@ -123,7 +123,7 @@ pub const MAX_FUN_SIZE: usize = 64 * 1024 * 1024;
 ///     ..Limits::default()
 /// };
 /// ```
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Limits {
     /// Maximum byte length of a `BINARY_EXT` payload.
     pub max_binary_size: usize,
