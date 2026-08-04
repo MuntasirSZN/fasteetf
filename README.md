@@ -41,7 +41,7 @@ A extremely fast, Rust-based, [`no_std`](https://docs.rust-embedded.org/book/int
 By default, `fasteetf` enables [`std`](https://docs.rs/crate/fasteetf/latest/features#std), [`compression`](https://docs.rs/crate/fasteetf/latest/features#compression), and [`zlib-rs`](https://docs.rs/crate/fasteetf/latest/features#zlib-rs):
 
 ```toml
-fasteetf = "0.1"  # pulls in std, alloc, compression, zlib-rs
+fasteetf = "0.2"  # pulls in std, alloc, compression, zlib-rs
 ```
 
 ## Installation
@@ -50,24 +50,24 @@ Add `fasteetf` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-fasteetf = "0.1"
+fasteetf = "0.2"
 ```
 
 ### Common Recipes
 
 **Bare-metal / kernel / WASM, no compression, no [`alloc`](https://doc.rust-lang.org/alloc/):**
 ```toml
-fasteetf = { version = "0.1", default-features = false }
+fasteetf = { version = "0.2", default-features = false }
 ```
 
 **Embedded with std but no compression:**
 ```toml
-fasteetf = { version = "0.1", default-features = false, features = ["std"] }
+fasteetf = { version = "0.2", default-features = false, features = ["std"] }
 ```
 
 **Server-side with a different zlib backend:**
 ```toml
-fasteetf = { version = "0.1", default-features = false, features = ["std", "compression", "miniz_oxide", "serde"] }
+fasteetf = { version = "0.2", default-features = false, features = ["std", "compression", "miniz_oxide", "serde"] }
 ```
 
 ## Usage
