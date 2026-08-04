@@ -55,7 +55,7 @@ check-features:
 # Run tests with nextest
 test:
     {{ nextest }}
-    cargo test --doc --locked
+    cargo test --doc --locked --all-features
 
 # Run tests without doc tests
 test-fast:
@@ -79,12 +79,10 @@ bench:
 
 # Generate documentation
 doc:
-    cargo doc --all --no-deps --open
+    cargo doc --all --all-features --open --no-deps
 
 # Generate documentation (CI variant, no open)
 docs-ci:
-    cargo doc --no-deps --no-default-features --locked
-    cargo doc --no-deps --locked
     cargo doc --no-deps --all-features --locked
 
 # Run all checks (format, lint, test)

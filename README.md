@@ -75,26 +75,33 @@ fasteetf = { version = "0.1", default-features = false, features = ["std", "comp
 ### Parsing ETF
 
 ```rust
-use fasteetf::{parse_etf, Term, Limits};
+use fasteetf::{parse_etf, ParseOptions, Term, Limits};
 
 // ETF-encoded small integer (42)
 let data = [131, 97, 42]; // 131 = magic, 97 = SMALL_INTEGER_EXT, 42 = value
 
 // Parse with a stack-allocated arena (no heap allocation)
 let mut arena = [core::mem::MaybeUninit::uninit(); 1024];
-let term = parse_etf(&data, &mut arena, Limits::default()).unwrap();
+let term = parse_etf(ParseOptions {
+    input: &data,
+    ast_arena: &mut arena,
+    limits: Limits::default(),
+    decompressed_buffer: None,
+    zlib_backend: None,
+})
+.unwrap();
 
-assert_eq!(term, Term::Int(42));
+assert!(matches!(term, Term::Int(42)));
 ```
 
 ### Encoding ETF
 
 ```rust
-use fasteetf::{encode_to_slice, Term, Limits};
+use fasteetf::{encode_to_buf, Term};
 
 let term = Term::Int(42);
 let mut buf = [0u8; 64];
-let written = encode_to_slice(&term, &mut buf, Limits::default()).unwrap();
+let written = encode_to_buf(&term, &mut buf).unwrap();
 
 // `written` contains the ETF-encoded bytes
 assert_eq!(&buf[..written], &[131, 97, 42]);
@@ -103,43 +110,72 @@ assert_eq!(&buf[..written], &[131, 97, 42]);
 ### Using Owned Types (with `alloc`)
 
 ```rust
-use fasteetf::{parse_etf_owned, OwnedTerm, Limits};
+use fasteetf::{parse_etf, OwnedTerm, ParseOptions, Term, Limits};
 
 let data = [131, 97, 42];
-let owned: OwnedTerm = parse_etf_owned(&data, Limits::default()).unwrap();
+let mut arena = [core::mem::MaybeUninit::uninit(); 1024];
+let term = parse_etf(ParseOptions {
+    input: &data,
+    ast_arena: &mut arena,
+    limits: Limits::default(),
+    decompressed_buffer: None,
+    zlib_backend: None,
+})
+.unwrap();
 
 // OwnedTerm owns its data - no lifetime constraints
-assert_eq!(owned, OwnedTerm::Int(42));
+let owned: OwnedTerm = OwnedTerm::from(term);
+assert!(matches!(owned, OwnedTerm::Int(42)));
 ```
 
 ### Compression Support (with `compression`)
 
 ```rust
-use fasteetf::{encode_to_compressed, parse_etf, Term, Limits};
+use fasteetf::{encode_to_compressed, parse_etf, ParseOptions, Term, Limits};
 
 let term = Term::Int(42);
-let mut buf = [0u8; 128];
-let written = encode_to_compressed(&term, &mut buf, Limits::default()).unwrap();
+let mut intermediate = [0u8; 128];
+let mut output = [0u8; 128];
+let written = encode_to_compressed(&term, &mut intermediate, &mut output, None).unwrap();
 
 // Parse compressed ETF
 let mut decomp = [0u8; 64];
 let mut arena = [core::mem::MaybeUninit::uninit(); 1024];
-let parsed = parse_etf(&buf[..written], &mut arena, Limits::default()).unwrap();
+let parsed = parse_etf(ParseOptions {
+    input: &output[..written],
+    decompressed_buffer: Some(&mut decomp),
+    zlib_backend: None,
+    ast_arena: &mut arena,
+    limits: Limits::default(),
+})
+.unwrap();
+
+assert!(matches!(parsed, Term::Int(42)));
 ```
 
 ### Serde Support (with `serde`)
 
 ```rust
-use fasteetf::{OwnedTerm, Limits};
+use fasteetf::{parse_etf, OwnedTerm, ParseOptions, Limits};
 use serde_json;
 
 // Convert ETF to JSON
 let data = [131, 97, 42];
-let term: OwnedTerm = fasteetf::parse_etf_owned(&data, Limits::default()).unwrap();
+let mut arena = [core::mem::MaybeUninit::uninit(); 1024];
+let term = parse_etf(ParseOptions {
+    input: &data,
+    ast_arena: &mut arena,
+    limits: Limits::default(),
+    decompressed_buffer: None,
+    zlib_backend: None,
+})
+.unwrap();
 let json = serde_json::to_string(&term).unwrap();
+assert_eq!(json, "42");
 
-// Convert JSON to ETF
+// Convert JSON to an OwnedTerm
 let term: OwnedTerm = serde_json::from_str(r#"{"ok": true}"#).unwrap();
+assert!(matches!(term, OwnedTerm::Map(_)));
 ```
 
 ## Performance

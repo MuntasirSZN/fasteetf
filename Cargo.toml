@@ -11,6 +11,9 @@ description = "A extremely fast, rust-based, no-std EETF (Erlang External Term F
 homepage = "https://github.com/MuntasirSZN/fasteetf"
 include = ["/src", "LICENSE", "/examples", "/benches"]
 
+[package.metadata.docs.rs]
+all-features = true
+
 [features]
 default = ["std", "compression", "zlib-rs"]
 alloc = [

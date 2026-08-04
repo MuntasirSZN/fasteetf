@@ -31,7 +31,7 @@ mod proofs;
 
 // ── Public API surface ──────────────────────────────────────────────────────
 
-pub use api::{parse_etf, parse_etf_streaming, ParseOptions};
+pub use api::{ParseOptions, parse_etf, parse_etf_streaming};
 pub use encoder::encode_to_buf;
 
 #[cfg(feature = "compression")]
@@ -41,7 +41,7 @@ pub use encoder::encode_to_vec;
 pub use error::{EtfError, Needed};
 pub use limits::*;
 pub use types::{AtomUtf8, Function, Pid, Port, Record, Reference, Term};
-pub use visitor::{parse_etf_with_visitor, parse_etf_with_visitor_streaming, Visitor};
+pub use visitor::{Visitor, parse_etf_with_visitor, parse_etf_with_visitor_streaming};
 #[cfg(feature = "compression")]
 pub use zlib::ZlibCompressFn;
 pub use zlib::{ZlibBackend, ZlibDecompressFn};
