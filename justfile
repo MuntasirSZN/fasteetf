@@ -63,9 +63,9 @@ test-fast:
 
 # Run wasm32 tests in Node via wasm-pack (requires node + wasm-pack installed)
 test-wasm:
-    wasm-pack test --node
+    wasm-pack test --node --features serde
     @echo "{{ CYAN + UNDERLINE }}[INFO]{{ NORMAL }} {{ GREEN + BOLD }}Now doing with SIMD enabled{{ NORMAL }}"
-    RUSTFLAGS="-Ctarget-feature=+simd128" wasm-pack test --node
+    RUSTFLAGS="-Ctarget-feature=+simd128" wasm-pack test --node --features serde
 
 # Run tests with ASAN (requires nightly + clang/llvm)
 asan-test:
