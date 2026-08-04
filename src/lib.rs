@@ -52,6 +52,9 @@ mod types;
 mod visitor;
 mod zlib;
 
+#[cfg(kani)]
+mod proofs;
+
 // ── Public API surface ──────────────────────────────────────────────────────
 
 pub use api::{ParseOptions, parse_etf, parse_etf_streaming};

@@ -33,7 +33,7 @@ mod compound;
 mod scalar;
 
 use self::compound::*;
-use self::scalar::*;
+pub(crate) use self::scalar::*;
 
 // ── Write cursor ───────────────────────────────────────────────────────────
 

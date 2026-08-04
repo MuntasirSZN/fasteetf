@@ -1,0 +1,6 @@
+{
+  "rust-analyzer.cargo.extraEnv": {
+    "RUSTFLAGS": "--cfg kani_ra --cfg kani",
+    "RUSTUP_TOOLCHAIN": "nightly"
+  }
+}

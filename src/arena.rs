@@ -4,6 +4,22 @@ use core::mem::MaybeUninit;
 use crate::error::EtfError;
 use crate::limits::Limits;
 
+/// Round `addr` up to the next multiple of `align`.
+///
+/// `align` must be a non-zero power of two.  Returns the smallest `x >= addr`
+/// with `x % align == 0`; the caller must ensure `addr` is not within
+/// `align - 1` bytes of `usize::MAX` (the adjustment would otherwise wrap).
+#[inline(always)]
+pub(crate) fn align_up(addr: usize, align: usize) -> usize {
+    let misalignment = addr & (align - 1);
+    let adj = if misalignment == 0 {
+        0
+    } else {
+        align - misalignment
+    };
+    addr + adj
+}
+
 /// A simple bump allocator used to build the AST from a pre-allocated scratch buffer.
 ///
 /// The initial pointer is aligned to `max_align_t` (typically 16 bytes) so
@@ -40,13 +56,8 @@ impl<'a> Bump<'a> {
 
         // Round ptr up to max_align_t.
         let align = core::mem::align_of::<u128>();
-        let misalignment = (raw_start as usize) & (align - 1);
-        let adj = if misalignment == 0 {
-            0
-        } else {
-            align - misalignment
-        };
-        let ptr = unsafe { raw_start.add(adj) };
+        let aligned = align_up(raw_start as usize, align);
+        let ptr = unsafe { raw_start.add(aligned - raw_start as usize) };
 
         Bump {
             ptr,
