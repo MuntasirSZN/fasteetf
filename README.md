@@ -160,7 +160,7 @@ See the `examples/` directory for more usage examples.
 
 ## License
 
-This project is licensed under the LGPL-3.0-or-later license. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the LGPL-3.0-or-later license. See the [LICENSE](https://github.com/MuntasirSZN/fasteetf/blob/main/LICENSE) file for details.
 
 ## Contributing
 
