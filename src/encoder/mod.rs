@@ -250,9 +250,12 @@ fn encode_term<S: Sink>(enc: &mut S, term: &Term) -> Result<(), EtfError> {
 
         Term::List(elements) => encode_list(enc, elements),
         Term::ImproperList(elements) => {
-            // elements slice includes the tail as the last element
+            // elements slice includes the tail as the last element; the
+            // parser can produce a zero-element improper list (LIST_EXT
+            // with Len = 0 and a non-NIL tail), so only the fully empty
+            // case is rejected.
             let len = elements.len();
-            if len < 2 {
+            if len == 0 {
                 return Err(EtfError::InvalidSize);
             }
             let (prefix, tail) = elements.split_at(len - 1);

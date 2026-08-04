@@ -128,7 +128,12 @@ pub(crate) fn parse_new_fun<'a>(
     // Include tag byte and Size field in the slice
     // Tag (1 byte) + Size (4 bytes) + payload (remaining bytes)
     let start = cursor.consumed() - 5; // Go back 5 bytes: 1 tag + 4 Size
-    let end = start + 5 + remaining; // 5 bytes (tag + Size) + remaining payload
+    // `take` bounds-checks the payload against the remaining input (returning
+    // `Incomplete` / `UnexpectedEof` when truncated) and advances the cursor
+    // past it so surrounding container framing stays aligned.
+    let payload = cursor.take(remaining)?;
+    // 5 bytes (tag + Size) + payload length actually present
+    let end = start + 5 + payload.len();
     let slice = cursor.slice_between(start, end);
     Ok(Term::Function(slice))
 }
