@@ -73,3 +73,31 @@ fn test_invalid_fun_size() {
     let err = parse_err(&buf);
     assert!(matches!(err, EtfError::InvalidSize));
 }
+
+#[test]
+fn test_truncated_fun_payload() {
+    // NEW_FUN_EXT Size claims 17 payload bytes (21 total) but only 16 are
+    // present: must yield UnexpectedEof instead of panicking on the slice.
+    let mut buf = vec![131, 112, 0, 0, 0, 21];
+    buf.extend_from_slice(&[0x40; 16]);
+    let err = parse_err(&buf);
+    assert!(matches!(err, EtfError::UnexpectedEof));
+}
+
+#[test]
+fn test_nested_new_fun_consumes_payload() {
+    // A NEW_FUN inside a tuple must consume its payload so the tuple framing
+    // stays aligned: {fun, a} = 104 02 112 Size(4) payload 77 01 97 97.
+    let mut buf = vec![131, 104, 2, 112, 0, 0, 0, 8];
+    buf.extend_from_slice(&[1, 2, 3, 4]); // fun payload
+    buf.extend_from_slice(&[119, 1, 97]); // tail element: atom "a"
+    let ok = with_parse(&buf, |term| match term {
+        fasteetf::Term::Tuple(elems) => {
+            elems.len() == 2
+                && matches!(elems[0], fasteetf::Term::Function(_))
+                && matches!(elems[1], fasteetf::Term::Atom(_))
+        }
+        _ => false,
+    });
+    assert!(ok, "expected {{fun, a}} tuple");
+}

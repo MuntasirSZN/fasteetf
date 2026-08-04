@@ -196,13 +196,24 @@ fn test_encode_improper_list() {
 
 #[test]
 fn test_encode_improper_list_too_short() {
-    // An improper list must have at least one element plus the tail; a term
-    // with fewer than two entries is malformed.
+    // An improper list must have a tail; only the fully empty slice is
+    // malformed. A single entry is a zero-element improper list
+    // (LIST_EXT Len=0 + non-NIL tail), which the parser can produce and
+    // which round-trips.
     let err = encode_to_vec(&Term::ImproperList(&[])).unwrap_err();
     assert!(matches!(err, EtfError::InvalidSize));
     let single = [Term::Int(1)];
-    let err = encode_to_vec(&Term::ImproperList(&single)).unwrap_err();
-    assert!(matches!(err, EtfError::InvalidSize));
+    let encoded = encode_to_vec(&Term::ImproperList(&single)).unwrap();
+    assert_eq!(encoded, [131, 108, 0, 0, 0, 0, 97, 1]);
+}
+
+#[test]
+fn test_roundtrip_zero_element_improper_list() {
+    // LIST_EXT Len=0 with a non-NIL tail parses to a one-entry
+    // ImproperList and must encode back to identical bytes.
+    let input = b"\x83\x6c\x00\x00\x00\x00\x77\x00"; // tail: empty atom
+    let encoded = with_parse(input, |term| encode_ok(&term));
+    assert_eq!(encoded, input);
 }
 
 // ── Map encoding ───────────────────────────────────────────────────────────
