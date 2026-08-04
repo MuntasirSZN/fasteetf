@@ -1,4 +1,4 @@
-use crate::encoder::{encode_atom, encode_int, encode_small_big, Sink};
+use crate::encoder::{Sink, encode_atom, encode_int, encode_small_big};
 use crate::error::EtfError;
 use crate::tags::*;
 

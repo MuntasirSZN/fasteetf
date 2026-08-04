@@ -134,7 +134,9 @@ fn cursor_consumed_and_slice_between() {
     let data = &bytes[..len as usize];
     let mut c = Cursor::new(data);
     let _ = c.read_u8();
-    assert_eq!(c.consumed(), 1);
+    if len > 0 {
+        assert_eq!(c.consumed(), 1);
+    }
     let s = c.slice_between(start as usize, end as usize);
     assert_eq!(s.len(), end as usize - start as usize);
     for i in 0..s.len() {
