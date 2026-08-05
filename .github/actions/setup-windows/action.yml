@@ -1,5 +1,14 @@
 name: Setup Windows
-description: Enable Git long paths, Windows long paths, and cargo CLI git fetch
+description: >-
+  Enable Git long paths, Windows long paths, and cargo CLI git fetch. With the
+  `asan` input set to `true`, also add the MSVC AddressSanitizer runtime DLL
+  directory (next to cl.exe) to PATH so ASan-instrumented tests can run.
+
+inputs:
+  asan:
+    description: Add the MSVC AddressSanitizer runtime DLL directory to PATH
+    required: false
+    default: "false"
 
 runs:
   using: composite
@@ -28,3 +37,33 @@ runs:
         else
           printf '\n[net]\ngit-fetch-with-cli = true\n' >> "$cfg"
         fi
+
+    - name: Add ASan DLL to PATH
+      if: inputs.asan == 'true'
+      shell: powershell
+      run: |
+        $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+        if (-not (Test-Path $vswhere)) {
+          Write-Error "vswhere not found at $vswhere"
+          exit 1
+        }
+        $installPath = & $vswhere -latest -products * `
+          -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+          -property installationPath
+        if (-not $installPath) {
+          Write-Error "No Visual Studio installation with the VC toolset found"
+          exit 1
+        }
+        # MSVC ships the ASan runtime next to cl.exe (rustc links it via
+        # /INFERASANLIBS); the DLL must be on PATH to run instrumented tests.
+        $asanDll = Get-ChildItem `
+          -Path (Join-Path $installPath 'VC\Tools\MSVC\*\bin\Host*\x64\clang_rt.asan_dynamic-*.dll') `
+          -ErrorAction SilentlyContinue |
+          Select-Object -First 1
+        if (-not $asanDll) {
+          Write-Error "clang_rt.asan_dynamic-*.dll not found under $installPath"
+          exit 1
+        }
+        $asanDir = $asanDll.DirectoryName
+        Add-Content -Path $env:GITHUB_PATH -Value $asanDir
+        Write-Host "Added $asanDir to PATH"
