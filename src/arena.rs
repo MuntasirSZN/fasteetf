@@ -93,7 +93,7 @@ impl<'a> Bump<'a> {
             return Err(EtfError::ArenaExhausted);
         }
 
-        let ptr = addr as *mut u8;
+        let ptr = self.ptr.with_addr(addr);
 
         // Check if the allocation would fit before doing ptr.add(size).
         // ptr.add() is UB if it would go out of bounds.
