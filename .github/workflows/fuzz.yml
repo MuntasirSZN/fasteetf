@@ -9,6 +9,8 @@ on:
 jobs:
   fuzz:
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     env:
       FUZZ_TIME: 600
     strategy:
@@ -25,6 +27,8 @@ jobs:
           - parse_structured
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: moonrepo/setup-rust@abb2d32350334249b178c401e5ec5836e0cd88d3 # v1.3.0
         with:
           channel: nightly
