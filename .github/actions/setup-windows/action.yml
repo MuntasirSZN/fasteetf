@@ -1,8 +1,8 @@
 name: Setup Windows
 description: >-
-  Enable Git long paths, Windows long paths, and cargo CLI git fetch. With the
-  `asan` input set to `true`, also add the MSVC AddressSanitizer runtime DLL
-  directory (next to cl.exe) to PATH so ASan-instrumented tests can run.
+  Enable Git long paths. With the `asan` input set to `true`, also add the
+  MSVC AddressSanitizer runtime DLL directory (next to cl.exe) to PATH so
+  ASan-instrumented tests can run.
 
 inputs:
   asan:
@@ -14,29 +14,8 @@ runs:
   using: composite
   steps:
     - name: Enable Git long paths
-      shell: bash
-      run: git config --system core.longpaths true
-
-    - name: Enable Windows long paths
       shell: powershell
-      run: |
-        New-ItemProperty `
-          -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" `
-          -Name LongPathsEnabled `
-          -Value 1 `
-          -PropertyType DWORD `
-          -Force
-
-    - name: Configure cargo to use CLI git fetch
-      shell: bash
-      run: |
-        mkdir -p "$HOME/.cargo"
-        cfg="$HOME/.cargo/config.toml"
-        if [ -f "$cfg" ] && grep -q 'git-fetch-with-cli' "$cfg"; then
-          : # already present
-        else
-          printf '\n[net]\ngit-fetch-with-cli = true\n' >> "$cfg"
-        fi
+      run: git config --system core.longpaths true
 
     - name: Add ASan DLL to PATH
       if: inputs.asan == 'true'
