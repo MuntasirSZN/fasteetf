@@ -2,6 +2,7 @@ name: Kani CI
 on:
   pull_request:
   push:
+    branches: main
 
 permissions:
   security-events: write
