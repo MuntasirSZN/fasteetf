@@ -3,32 +3,21 @@ use core::alloc::Layout;
 use crate::error::EtfError;
 use crate::limits::Limits;
 
-/// Thin wrapper around `bumpalo` used to build the parsed term tree.
-pub(crate) struct Bump<'a> {
-    arena: &'a bumpalo::Bump<16>,
-    limits: *const Limits,
+pub(crate) struct AllocationState {
     cursor: usize,
     logical_limit: Option<usize>,
 }
 
-impl<'a> Bump<'a> {
-    pub(crate) fn new(arena: &'a bumpalo::Bump<16>, limits: &Limits) -> Self {
+impl AllocationState {
+    pub(crate) fn new(logical_limit: Option<usize>) -> Self {
         Self {
-            arena,
-            limits,
             cursor: 0,
-            logical_limit: arena.allocation_limit(),
+            logical_limit,
         }
     }
 
     #[inline(always)]
-    pub(crate) fn limits(&self) -> &Limits {
-        // SAFETY: `limits` is caller-owned and guaranteed to outlive parsing.
-        unsafe { &*self.limits }
-    }
-
-    #[inline(always)]
-    pub(crate) fn alloc_slice<T>(&mut self, len: usize) -> Result<&'a mut [T], EtfError> {
+    pub(crate) fn reserve<T>(&mut self, len: usize) -> Result<(usize, Layout), EtfError> {
         let layout = Layout::array::<T>(len).map_err(|_| EtfError::ArenaExhausted)?;
         let aligned_cursor = self
             .cursor
@@ -41,12 +30,40 @@ impl<'a> Bump<'a> {
         if self.logical_limit.is_some_and(|limit| logical_end > limit) {
             return Err(EtfError::ArenaExhausted);
         }
+        self.cursor = logical_end;
+        Ok((aligned_cursor, layout))
+    }
+}
 
+/// Thin wrapper around `bumpalo` used to build the parsed term tree.
+pub(crate) struct Bump<'a> {
+    arena: &'a bumpalo::Bump<16>,
+    limits: *const Limits,
+    allocations: AllocationState,
+}
+
+impl<'a> Bump<'a> {
+    pub(crate) fn new(arena: &'a bumpalo::Bump<16>, limits: &Limits) -> Self {
+        Self {
+            arena,
+            limits,
+            allocations: AllocationState::new(arena.allocation_limit()),
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn limits(&self) -> &Limits {
+        // SAFETY: `limits` is caller-owned and guaranteed to outlive parsing.
+        unsafe { &*self.limits }
+    }
+
+    #[inline(always)]
+    pub(crate) fn alloc_slice<T>(&mut self, len: usize) -> Result<&'a mut [T], EtfError> {
+        let (_, layout) = self.allocations.reserve::<T>(len)?;
         let ptr = self
             .arena
             .try_alloc_layout(layout)
             .map_err(|_| EtfError::ArenaExhausted)?;
-        self.cursor = logical_end;
         // SAFETY: `try_alloc_layout` returns a valid allocation for `layout`.
         Ok(unsafe { core::slice::from_raw_parts_mut(ptr.as_ptr() as *mut T, len) })
     }
