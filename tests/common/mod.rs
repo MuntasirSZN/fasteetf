@@ -52,6 +52,7 @@ pub fn parse_err(input: &[u8]) -> EtfError {
 }
 
 /// Encode a term into a `Vec`, panicking on error.
+#[cfg(feature = "alloc")]
 pub fn encode_ok(term: &Term<'_>) -> Vec<u8> {
     encode_to_vec(term).unwrap()
 }

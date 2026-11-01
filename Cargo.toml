@@ -120,3 +120,13 @@ required-features = ["serde"]
 name = "proptest"
 path = "tests/proptest.rs"
 required-features = ["alloc"]
+
+[[test]]
+name = "glaze"
+path = "tests/glaze.rs"
+required-features = ["alloc"]
+
+[[test]]
+name = "erlpack"
+path = "tests/erlpack.rs"
+required-features = ["alloc"]
