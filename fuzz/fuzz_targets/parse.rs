@@ -25,12 +25,13 @@ fuzz_target!(|data: &[u8]| {
     // We use a stack-allocated arena that is large enough for most
     // well-formed terms but will gracefully return ArenaExhausted for
     // pathological inputs.
-    let mut arena_buf = [core::mem::MaybeUninit::<u8>::uninit(); 8192];
+    let arena = bumpalo::Bump::<16>::with_min_align_and_capacity(8192);
+    arena.set_allocation_limit(Some(8192));
 
     let opts = fasteetf::ParseOptions {
         input: data,
         decompressed_buffer: None,
-        ast_arena: &mut arena_buf,
+        ast_arena: &arena,
         limits: fasteetf::Limits::default(),
         zlib_backend: None,
     };

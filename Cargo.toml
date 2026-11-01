@@ -8,7 +8,6 @@ keywords = ["erlang", "eetf", "parser", "serializer", "deserializer"]
 repository = "https://github.com/MuntasirSZN/fasteetf"
 categories = ["embedded", "encoding", "no-std", "no-std::no-alloc", "parser-implementations"]
 description = "A extremely fast, rust-based, no-std EETF (Erlang External Term Format) parser/encoder/(de)serializer"
-homepage = "https://github.com/MuntasirSZN/fasteetf"
 include = ["/src", "LICENSE", "/examples", "/benches"]
 
 [package.metadata.docs.rs]

@@ -21,17 +21,19 @@ fuzz_target!(|data: &[u8]| {
     // fixed stack buffer is too small for adversarial-but-valid inputs —
     // e.g. a 3.6 KiB input whose encoded form needs > 64 KiB of arena.
     // 512 B/byte covers the observed worst case with margin.
-    fn arena_for(len: usize) -> Vec<core::mem::MaybeUninit<u8>> {
+    fn arena_for(len: usize) -> bumpalo::Bump<16> {
         let bytes = (len * 512).clamp(2 * 1024 * 1024, 64 * 1024 * 1024);
-        vec![core::mem::MaybeUninit::uninit(); bytes]
+        let arena = bumpalo::Bump::<16>::with_min_align_and_capacity(bytes);
+        arena.set_allocation_limit(Some(bytes));
+        arena
     }
 
     // ── Step 1: Parse ─────────────────────────────────
-    let mut arena_buf = arena_for(data.len());
+    let mut arena = arena_for(data.len());
     let opts = fasteetf::ParseOptions {
         input: data,
         decompressed_buffer: None,
-        ast_arena: &mut arena_buf,
+        ast_arena: &arena,
         limits: fasteetf::Limits::default(),
         zlib_backend: None,
     };
@@ -48,11 +50,11 @@ fuzz_target!(|data: &[u8]| {
     };
 
     // ── Step 3: Re-parse ──────────────────────────────────
-    let mut arena_buf2 = arena_for(encoded.len());
+    let mut arena2 = arena_for(encoded.len());
     let opts2 = fasteetf::ParseOptions {
         input: &encoded,
         decompressed_buffer: None,
-        ast_arena: &mut arena_buf2,
+        ast_arena: &arena2,
         limits: fasteetf::Limits::default(),
         zlib_backend: None,
     };

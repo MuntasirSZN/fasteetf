@@ -38,10 +38,7 @@ impl<'a> Bump<'a> {
         let logical_end = aligned_cursor
             .checked_add(layout.size())
             .ok_or(EtfError::ArenaExhausted)?;
-        if self
-            .logical_limit
-            .is_some_and(|limit| logical_end > limit)
-        {
+        if self.logical_limit.is_some_and(|limit| logical_end > limit) {
             return Err(EtfError::ArenaExhausted);
         }
 

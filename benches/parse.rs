@@ -22,7 +22,6 @@
 
 #[cfg(not(target_arch = "wasm32"))]
 mod main {
-    use core::mem::MaybeUninit;
     use fasteetf::{
         AtomUtf8, EtfError, Limits, ParseOptions, Term, Visitor, encode_to_buf, encode_to_vec,
         parse_etf, parse_etf_with_visitor,
@@ -40,11 +39,12 @@ mod main {
 
     /// Parse ETF bytes using a stack-allocated arena (no heap allocs).
     pub fn parse_bytes(input: &[u8]) {
-        let mut arena_buf = [MaybeUninit::<u8>::uninit(); 65536];
+        let arena = bumpalo::Bump::<16>::with_min_align_and_capacity(65536);
+        arena.set_allocation_limit(Some(65536));
         parse_etf(ParseOptions {
             input,
             decompressed_buffer: None,
-            ast_arena: &mut arena_buf,
+            ast_arena: &arena,
             limits: Limits::default(),
             zlib_backend: None,
         })
@@ -53,11 +53,12 @@ mod main {
 
     /// Parse with custom limits using a stack-allocated arena.
     pub fn parse_bytes_with_limits(input: &[u8], limits: Limits) {
-        let mut arena_buf = [MaybeUninit::<u8>::uninit(); 65536];
+        let arena = bumpalo::Bump::<16>::with_min_align_and_capacity(65536);
+        arena.set_allocation_limit(Some(65536));
         parse_etf(ParseOptions {
             input,
             decompressed_buffer: None,
-            ast_arena: &mut arena_buf,
+            ast_arena: &arena,
             limits,
             zlib_backend: None,
         })

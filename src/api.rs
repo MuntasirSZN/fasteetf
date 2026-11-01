@@ -53,7 +53,10 @@ impl core::fmt::Debug for ParseOptions<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let mut d = f.debug_struct("ParseOptions");
         d.field("input_len", &self.input.len())
-            .field("ast_arena_allocated_bytes", &self.ast_arena.allocated_bytes())
+            .field(
+                "ast_arena_allocated_bytes",
+                &self.ast_arena.allocated_bytes(),
+            )
             .field("limits", &self.limits);
         #[cfg(feature = "compression")]
         d.field(

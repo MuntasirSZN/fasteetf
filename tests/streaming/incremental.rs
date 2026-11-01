@@ -74,7 +74,7 @@ fn test_streaming_accumulate() {
     let full = b"\x83\x68\x03\x61\x01\x61\x02\x61\x03"; // tuple(1, 2, 3)
     for split in 1..full.len() {
         let arena = bumpalo::Bump::<16>::with_min_align_and_capacity(65536);
-    arena.set_allocation_limit(Some(65536));
+        arena.set_allocation_limit(Some(65536));
         let chunk = &full[..split];
         // First attempt should fail with Incomplete (unless split == full.len).
         if split < full.len() {
@@ -97,7 +97,7 @@ fn test_streaming_accumulate() {
         }
         // With the full input it must succeed.
         let arena = bumpalo::Bump::<16>::with_min_align_and_capacity(65536);
-    arena.set_allocation_limit(Some(65536));
+        arena.set_allocation_limit(Some(65536));
         let term = fasteetf::parse_etf_streaming(fasteetf::ParseOptions {
             input: full,
 
