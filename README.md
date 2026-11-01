@@ -196,6 +196,12 @@ This crate contains some unsafe code, specially SIMD and some unchecked operatio
 cargo bench
 ```
 
+## Notes / References
+
+- **Glaze** (`stephenberry/glaze`): ETF parsing patterns tested in `tests/glaze/` (issue #23). Not all `glaze/eetf_test.cpp` cases apply to `fasteetf` due to different representation (Term enum vs C++ structs).
+- **Erlpack** (`discord/erlpack`): ETF encoding and decoding patterns tested in `tests/erlpack/` — selected subset that aligns with `fasteetf` architecture.
+- All integration tests run with `cargo nextest` (see `justfile`).
+
 ## Documentation
 
 Full documentation is available at [docs.rs/fasteetf](https://docs.rs/fasteetf).
