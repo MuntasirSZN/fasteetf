@@ -80,11 +80,11 @@ use fasteetf::{parse_etf, ParseOptions, Term, Limits};
 // ETF-encoded small integer (42)
 let data = [131, 97, 42]; // 131 = magic, 97 = SMALL_INTEGER_EXT, 42 = value
 
-// Parse with a stack-allocated arena (no heap allocation)
-let mut arena = [core::mem::MaybeUninit::uninit(); 1024];
+let arena = bumpalo::Bump::<16>::with_min_align_and_capacity(1024);
+arena.set_allocation_limit(Some(1024));
 let term = parse_etf(ParseOptions {
     input: &data,
-    ast_arena: &mut arena,
+    ast_arena: &arena,
     limits: Limits::default(),
     decompressed_buffer: None,
     zlib_backend: None,
@@ -113,10 +113,11 @@ assert_eq!(&buf[..written], &[131, 97, 42]);
 use fasteetf::{parse_etf, OwnedTerm, ParseOptions, Term, Limits};
 
 let data = [131, 97, 42];
-let mut arena = [core::mem::MaybeUninit::uninit(); 1024];
+let arena = bumpalo::Bump::<16>::with_min_align_and_capacity(1024);
+arena.set_allocation_limit(Some(1024));
 let term = parse_etf(ParseOptions {
     input: &data,
-    ast_arena: &mut arena,
+    ast_arena: &arena,
     limits: Limits::default(),
     decompressed_buffer: None,
     zlib_backend: None,
@@ -140,12 +141,13 @@ let written = encode_to_compressed(&term, &mut intermediate, &mut output, None).
 
 // Parse compressed ETF
 let mut decomp = [0u8; 64];
-let mut arena = [core::mem::MaybeUninit::uninit(); 1024];
+let arena = bumpalo::Bump::<16>::with_min_align_and_capacity(1024);
+arena.set_allocation_limit(Some(1024));
 let parsed = parse_etf(ParseOptions {
     input: &output[..written],
     decompressed_buffer: Some(&mut decomp),
     zlib_backend: None,
-    ast_arena: &mut arena,
+    ast_arena: &arena,
     limits: Limits::default(),
 })
 .unwrap();
@@ -161,10 +163,11 @@ use serde_json;
 
 // Convert ETF to JSON
 let data = [131, 97, 42];
-let mut arena = [core::mem::MaybeUninit::uninit(); 1024];
+let arena = bumpalo::Bump::<16>::with_min_align_and_capacity(1024);
+arena.set_allocation_limit(Some(1024));
 let term = parse_etf(ParseOptions {
     input: &data,
-    ast_arena: &mut arena,
+    ast_arena: &arena,
     limits: Limits::default(),
     decompressed_buffer: None,
     zlib_backend: None,

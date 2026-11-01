@@ -7,8 +7,6 @@
 // - `parse_etf_streaming` for incremental/streaming parsing
 // ─────────────────────────────────────────────────────────────────────────────
 
-use core::mem::MaybeUninit;
-
 use crate::EtfError;
 use crate::Limits;
 use crate::arena;
@@ -21,10 +19,11 @@ use crate::zlib;
 pub struct ParseOptions<'a> {
     /// The raw ETF byte slice to parse.
     pub input: &'a [u8],
-    /// Scratch space used by the bump arena to build the AST.  The required
-    /// size depends on the complexity of the term; 8–16 kiB is a good starting
-    /// point for most real-world messages.
-    pub ast_arena: &'a mut [MaybeUninit<u8>],
+    /// Bump arena used to build the AST.
+    ///
+    /// Construct with `bumpalo::Bump::<16>::with_min_align_and_capacity(...)` and typically
+    /// set an allocation limit equal to that capacity.
+    pub ast_arena: &'a bumpalo::Bump<16>,
     /// Resource limits enforced during parsing.
     ///
     /// Use [`Limits::default()`] for the built-in defaults, or construct a
@@ -49,13 +48,12 @@ pub struct ParseOptions<'a> {
     pub zlib_backend: Option<crate::ZlibDecompressFn>,
 }
 
-// Manual Debug: `ast_arena` is `&mut [MaybeUninit<u8>]`, which has no Debug,
-// so this prints the field sizes instead of the buffers themselves.
+// Manual Debug: we print only lengths and scalar settings.
 impl core::fmt::Debug for ParseOptions<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let mut d = f.debug_struct("ParseOptions");
         d.field("input_len", &self.input.len())
-            .field("ast_arena_len", &self.ast_arena.len())
+            .field("ast_arena_allocated_bytes", &self.ast_arena.allocated_bytes())
             .field("limits", &self.limits);
         #[cfg(feature = "compression")]
         d.field(
@@ -148,7 +146,8 @@ pub fn parse_etf<'a>(options: ParseOptions<'a>) -> Result<crate::Term<'a>, EtfEr
 ///
 /// ```ignore
 /// let mut buf = Vec::new();
-/// let mut arena = vec![core::mem::MaybeUninit::<u8>::uninit(); 65536];
+/// let arena = bumpalo::Bump::<16>::with_min_align_and_capacity(65536);
+/// arena.set_allocation_limit(Some(65536));
 ///
 /// loop {
 ///     // Read more data from socket / file / etc.
