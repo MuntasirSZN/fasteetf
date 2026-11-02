@@ -64,7 +64,6 @@ use crate::error::EtfError;
 ///
 /// ```ignore
 /// use fasteetf::{EtfError, ParseOptions, ZlibBackend, parse_etf, Limits};
-/// use core::mem::MaybeUninit;
 ///
 /// struct MyBackend;
 /// impl ZlibBackend for MyBackend {
@@ -74,12 +73,13 @@ use crate::error::EtfError;
 ///     }
 /// }
 ///
-/// let mut arena = [MaybeUninit::<u8>::uninit(); 4096];
+/// let arena = bumpalo::Bump::<16>::with_min_align_and_capacity(4096);
+/// arena.set_allocation_limit(Some(4096));
 /// let mut decomp = [0u8; 4096];
 /// let opts = ParseOptions {
 ///     input: compressed,
 ///     decompressed_buffer: Some(&mut decomp),
-///     ast_arena: &mut arena,
+///     ast_arena: &arena,
 ///     limits: Limits::default(),
 ///     zlib_backend: Some(<MyBackend as ZlibBackend>::decompress),
 /// };

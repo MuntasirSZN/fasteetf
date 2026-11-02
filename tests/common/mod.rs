@@ -5,25 +5,25 @@
 
 #![allow(dead_code)]
 
-use core::mem::MaybeUninit;
 use fasteetf::*;
 
 /// Parse `input` and pass the resulting `Term` to `f`.  The arena used during
 /// parsing lives on the caller's stack and is cleaned up when `f` returns.
 pub fn with_parse<R>(input: &[u8], f: impl FnOnce(Term<'_>) -> R) -> R {
-    let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
+    let arena = bumpalo::Bump::<16>::with_min_align_and_capacity(65536);
+    arena.set_allocation_limit(Some(65536));
     #[cfg(feature = "compression")]
     let options = ParseOptions {
         input,
         decompressed_buffer: None,
-        ast_arena: &mut arena,
+        ast_arena: &arena,
         limits: Limits::default(),
         zlib_backend: None,
     };
     #[cfg(not(feature = "compression"))]
     let options = ParseOptions {
         input,
-        ast_arena: &mut arena,
+        ast_arena: &arena,
         limits: Limits::default(),
     };
     let term = parse_etf(options).unwrap();
@@ -32,25 +32,27 @@ pub fn with_parse<R>(input: &[u8], f: impl FnOnce(Term<'_>) -> R) -> R {
 
 /// Parse input that is expected to be malformed, returning the error.
 pub fn parse_err(input: &[u8]) -> EtfError {
-    let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
+    let arena = bumpalo::Bump::<16>::with_min_align_and_capacity(65536);
+    arena.set_allocation_limit(Some(65536));
     #[cfg(feature = "compression")]
     let options = ParseOptions {
         input,
         decompressed_buffer: None,
-        ast_arena: &mut arena,
+        ast_arena: &arena,
         limits: Limits::default(),
         zlib_backend: None,
     };
     #[cfg(not(feature = "compression"))]
     let options = ParseOptions {
         input,
-        ast_arena: &mut arena,
+        ast_arena: &arena,
         limits: Limits::default(),
     };
     parse_etf(options).unwrap_err()
 }
 
 /// Encode a term into a `Vec`, panicking on error.
+#[cfg(feature = "alloc")]
 pub fn encode_ok(term: &Term<'_>) -> Vec<u8> {
     encode_to_vec(term).unwrap()
 }

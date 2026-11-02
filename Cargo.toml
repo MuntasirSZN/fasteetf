@@ -8,7 +8,6 @@ keywords = ["erlang", "eetf", "parser", "serializer", "deserializer"]
 repository = "https://github.com/MuntasirSZN/fasteetf"
 categories = ["embedded", "encoding", "no-std", "no-std::no-alloc", "parser-implementations"]
 description = "A extremely fast, rust-based, no-std EETF (Erlang External Term Format) parser/encoder/(de)serializer"
-homepage = "https://github.com/MuntasirSZN/fasteetf"
 include = ["/src", "LICENSE", "/examples", "/benches"]
 
 [package.metadata.docs.rs]
@@ -39,6 +38,7 @@ zlib-ng = ["dep:libz-ng-sys"]
 cloudflare-zlib = ["dep:cloudflare-zlib-sys"]
 
 [dependencies]
+bumpalo = { version = "3.20.3", default-features = false }
 serde_core = { version = "1", default-features = false, optional = true }
 thiserror = { version = "2", default-features = false }
 zlib-rs = { version = "0.6.3", default-features = false, features = [
@@ -119,4 +119,14 @@ required-features = ["serde"]
 [[test]]
 name = "proptest"
 path = "tests/proptest.rs"
+required-features = ["alloc"]
+
+[[test]]
+name = "glaze"
+path = "tests/glaze.rs"
+required-features = ["alloc"]
+
+[[test]]
+name = "erlpack"
+path = "tests/erlpack.rs"
 required-features = ["alloc"]

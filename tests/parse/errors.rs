@@ -45,22 +45,22 @@ fn test_binary_too_large() {
 
 #[test]
 fn test_arena_exhaustion() {
-    use core::mem::MaybeUninit;
-    let mut arena = vec![MaybeUninit::<u8>::uninit(); 16];
+    let arena = bumpalo::Bump::<16>::with_min_align_and_capacity(16);
+    arena.set_allocation_limit(Some(16));
     let input = b"\x83\x68\x0a\x61\x01\x61\x02\x61\x03\x61\x04\x61\x05\
                   \x61\x06\x61\x07\x61\x08\x61\x09\x61\x0a";
     #[cfg(feature = "compression")]
     let options = ParseOptions {
         input,
         decompressed_buffer: None,
-        ast_arena: &mut arena,
+        ast_arena: &arena,
         limits: Limits::default(),
         zlib_backend: None,
     };
     #[cfg(not(feature = "compression"))]
     let options = ParseOptions {
         input,
-        ast_arena: &mut arena,
+        ast_arena: &arena,
         limits: Limits::default(),
     };
     let err = parse_etf(options).unwrap_err();

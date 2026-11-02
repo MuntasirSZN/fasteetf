@@ -67,11 +67,11 @@ fn encode_to_compressed_roundtrip_with_compile_time_backend() {
 
     // Roundtrip: parse the COMPRESSED wire back to a Term.
     let mut decomp = [0u8; 64];
-    let mut arena = make_arena();
+    let arena = make_arena();
     let parsed = parse_etf(ParseOptions {
         input: wire,
         decompressed_buffer: Some(&mut decomp),
-        ast_arena: &mut arena,
+        ast_arena: &arena,
         limits: Limits::default(),
         zlib_backend: None,
     })
@@ -95,11 +95,11 @@ fn encode_to_compressed_roundtrip_with_runtime_backend() {
     let wire = &output[..n];
 
     let mut decomp = [0u8; 64];
-    let mut arena = make_arena();
+    let arena = make_arena();
     let parsed = parse_etf(ParseOptions {
         input: wire,
         decompressed_buffer: Some(&mut decomp),
-        ast_arena: &mut arena,
+        ast_arena: &arena,
         limits: Limits::default(),
         zlib_backend: Some(zlib_rs_decompress),
     })

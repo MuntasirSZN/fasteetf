@@ -15,7 +15,6 @@
 #[path = "../common/mod.rs"]
 mod common;
 use common::*;
-use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use fasteetf::{
     EtfError, Limits, ParseOptions, Term, ZlibBackend, encode_to_compressed, parse_etf,
@@ -86,8 +85,10 @@ fn compressed_etf(inner: &[u8]) -> Vec<u8> {
     out
 }
 
-fn make_arena() -> Vec<MaybeUninit<u8>> {
-    vec![MaybeUninit::<u8>::uninit(); 65536]
+fn make_arena() -> bumpalo::Bump<16> {
+    let arena = bumpalo::Bump::<16>::with_min_align_and_capacity(65536);
+    arena.set_allocation_limit(Some(65536));
+    arena
 }
 mod decode;
 mod encode;

@@ -22,7 +22,6 @@
 
 #[cfg(not(target_arch = "wasm32"))]
 mod main {
-    use core::mem::MaybeUninit;
     use fasteetf::{
         AtomUtf8, EtfError, Limits, ParseOptions, Term, Visitor, encode_to_buf, encode_to_vec,
         parse_etf, parse_etf_with_visitor,
@@ -38,26 +37,29 @@ mod main {
 
     // ── Helpers ─────────────────────────────────────────────────────────────────
 
-    /// Parse ETF bytes using a stack-allocated arena (no heap allocs).
-    pub fn parse_bytes(input: &[u8]) {
-        let mut arena_buf = [MaybeUninit::<u8>::uninit(); 65536];
-        parse_etf(ParseOptions {
-            input,
-            decompressed_buffer: None,
-            ast_arena: &mut arena_buf,
-            limits: Limits::default(),
-            zlib_backend: None,
-        })
-        .unwrap();
+    /// Capacity (and allocation limit) of the AST arena.
+    const ARENA_CAPACITY: usize = 65536;
+
+    /// Build a pre-allocated AST arena.  Benches create it in divan's untimed
+    /// input setup, so only parsing is measured (the base implementation used
+    /// an uninitialised stack buffer with no allocation cost).
+    pub fn new_arena() -> bumpalo::Bump<16> {
+        let arena = bumpalo::Bump::<16>::with_min_align_and_capacity(ARENA_CAPACITY);
+        arena.set_allocation_limit(Some(ARENA_CAPACITY));
+        arena
     }
 
-    /// Parse with custom limits using a stack-allocated arena.
-    pub fn parse_bytes_with_limits(input: &[u8], limits: Limits) {
-        let mut arena_buf = [MaybeUninit::<u8>::uninit(); 65536];
+    /// Parse ETF bytes into the given pre-allocated arena.
+    pub fn parse_bytes(arena: &bumpalo::Bump<16>, input: &[u8]) {
+        parse_bytes_with_limits(arena, input, Limits::default());
+    }
+
+    /// Parse with custom limits into the given pre-allocated arena.
+    pub fn parse_bytes_with_limits(arena: &bumpalo::Bump<16>, input: &[u8], limits: Limits) {
         parse_etf(ParseOptions {
             input,
             decompressed_buffer: None,
-            ast_arena: &mut arena_buf,
+            ast_arena: arena,
             limits,
             zlib_backend: None,
         })
@@ -135,94 +137,113 @@ mod main {
     // ── Benches ─────────────────────────────────────────────────────────────────
 
     #[divan::bench]
-    pub fn small_int() {
-        parse_bytes(b"\x83\x61\x2a");
+    pub fn small_int(bencher: divan::Bencher) {
+        bencher.with_inputs(new_arena).bench_local_refs(|arena| {
+            parse_bytes(arena, b"\x83\x61\x2a");
+        });
     }
 
     #[divan::bench]
-    pub fn flat_list_1000() {
-        parse_bytes(&flat_list_1000_wire());
+    pub fn flat_list_1000(bencher: divan::Bencher) {
+        bencher.with_inputs(new_arena).bench_local_refs(|arena| {
+            parse_bytes(arena, &flat_list_1000_wire());
+        });
     }
 
     #[divan::bench]
-    pub fn deep_nested_64() {
-        let mut input = Vec::new();
-        input.push(131);
-        for _ in 0..64 {
-            input.push(108); // LIST_EXT
-            input.extend_from_slice(&1u32.to_be_bytes());
-        }
-        input.push(97); // SMALL_INTEGER_EXT
-        input.push(42);
-        input.extend(std::iter::repeat_n(106, 64)); // NIL_EXT
-        parse_bytes(&input);
-    }
-
-    #[divan::bench]
-    pub fn binary_1mb() {
-        let mut input = Vec::with_capacity(6 + 1024 * 1024);
-        input.push(131);
-        input.push(109); // BINARY_EXT
-        input.extend_from_slice(&(1024u32 * 1024).to_be_bytes());
-        input.resize(input.capacity(), 0xAB);
-        parse_bytes(&input);
-    }
-
-    #[divan::bench]
-    pub fn mixed_map_10() {
-        let mut input = Vec::new();
-        input.push(131);
-        input.push(116); // MAP_EXT
-        input.extend_from_slice(&10u32.to_be_bytes());
-        for i in 0..10 {
-            let key = format!("key{}", i);
-            input.push(119); // SMALL_ATOM_UTF8_EXT
-            input.push(key.len() as u8);
-            input.extend_from_slice(key.as_bytes());
+    pub fn deep_nested_64(bencher: divan::Bencher) {
+        bencher.with_inputs(new_arena).bench_local_refs(|arena| {
+            let mut input = Vec::new();
+            input.push(131);
+            for _ in 0..64 {
+                input.push(108); // LIST_EXT
+                input.extend_from_slice(&1u32.to_be_bytes());
+            }
             input.push(97); // SMALL_INTEGER_EXT
-            input.push(i);
-        }
-        parse_bytes(&input);
+            input.push(42);
+            input.extend(std::iter::repeat_n(106, 64)); // NIL_EXT
+            parse_bytes(arena, &input);
+        });
+    }
+
+    #[divan::bench]
+    pub fn binary_1mb(bencher: divan::Bencher) {
+        bencher.with_inputs(new_arena).bench_local_refs(|arena| {
+            let mut input = Vec::with_capacity(6 + 1024 * 1024);
+            input.push(131);
+            input.push(109); // BINARY_EXT
+            input.extend_from_slice(&(1024u32 * 1024).to_be_bytes());
+            input.resize(input.capacity(), 0xAB);
+            parse_bytes(arena, &input);
+        });
+    }
+
+    #[divan::bench]
+    pub fn mixed_map_10(bencher: divan::Bencher) {
+        bencher.with_inputs(new_arena).bench_local_refs(|arena| {
+            let mut input = Vec::new();
+            input.push(131);
+            input.push(116); // MAP_EXT
+            input.extend_from_slice(&10u32.to_be_bytes());
+            for i in 0..10 {
+                let key = format!("key{}", i);
+                input.push(119); // SMALL_ATOM_UTF8_EXT
+                input.push(key.len() as u8);
+                input.extend_from_slice(key.as_bytes());
+                input.push(97); // SMALL_INTEGER_EXT
+                input.push(i);
+            }
+            parse_bytes(arena, &input);
+        });
     }
 
     // ── Deferred benchmark infrastructure (TODO.md) ─────────────────────────────
 
     /// Many small atoms (SMALL_ATOM_UTF8_EXT) — measures the atom fast paths.
     #[divan::bench]
-    pub fn atom_parsing() {
-        parse_bytes(&WIRE_ATOMS_1000);
+    pub fn atom_parsing(bencher: divan::Bencher) {
+        bencher.with_inputs(new_arena).bench_local_refs(|arena| {
+            parse_bytes(arena, &WIRE_ATOMS_1000);
+        });
     }
 
     /// A large tuple (LARGE_TUPLE_EXT, 1000 elements) — measures arena allocation.
     #[divan::bench]
-    pub fn tuple_parsing() {
-        let mut input = Vec::with_capacity(6 + 2000);
-        input.push(131);
-        input.push(105); // LARGE_TUPLE_EXT
-        input.extend_from_slice(&(1000u32).to_be_bytes());
-        for _ in 0..1000 {
-            input.push(97); // SMALL_INTEGER_EXT
-            input.push(1);
-        }
-        parse_bytes(&input);
+    pub fn tuple_parsing(bencher: divan::Bencher) {
+        bencher.with_inputs(new_arena).bench_local_refs(|arena| {
+            let mut input = Vec::with_capacity(6 + 2000);
+            input.push(131);
+            input.push(105); // LARGE_TUPLE_EXT
+            input.extend_from_slice(&(1000u32).to_be_bytes());
+            for _ in 0..1000 {
+                input.push(97); // SMALL_INTEGER_EXT
+                input.push(1);
+            }
+            parse_bytes(arena, &input);
+        });
     }
 
     /// STRING_EXT with the legacy expansion (List of Ints) — default limits.
     #[divan::bench]
-    pub fn string_ext_expand() {
-        parse_bytes(&WIRE_STRING_EXT);
+    pub fn string_ext_expand(bencher: divan::Bencher) {
+        bencher.with_inputs(new_arena).bench_local_refs(|arena| {
+            parse_bytes(arena, &WIRE_STRING_EXT);
+        });
     }
 
     /// STRING_EXT with the compact `Term::String` representation.
     #[divan::bench]
-    pub fn string_ext_compact() {
-        parse_bytes_with_limits(
-            &WIRE_STRING_EXT,
-            Limits {
-                expand_string_ext_to_list: false,
-                ..Limits::default()
-            },
-        );
+    pub fn string_ext_compact(bencher: divan::Bencher) {
+        bencher.with_inputs(new_arena).bench_local_refs(|arena| {
+            parse_bytes_with_limits(
+                arena,
+                &WIRE_STRING_EXT,
+                Limits {
+                    expand_string_ext_to_list: false,
+                    ..Limits::default()
+                },
+            );
+        });
     }
 
     /// Encode a 1000-element list into a fixed caller buffer.
@@ -253,8 +274,10 @@ mod main {
 
     /// AST (arena) parsing of the mixed map.
     #[divan::bench]
-    pub fn visitor_vs_ast_parse() {
-        parse_bytes(&WIRE_MIXED_MAP_10);
+    pub fn visitor_vs_ast_parse(bencher: divan::Bencher) {
+        bencher.with_inputs(new_arena).bench_local_refs(|arena| {
+            parse_bytes(arena, &WIRE_MIXED_MAP_10);
+        });
     }
 
     /// Zero-allocation visitor parsing of the mixed map.

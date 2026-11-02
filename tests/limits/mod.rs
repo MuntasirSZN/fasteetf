@@ -8,7 +8,6 @@
 #[path = "../common/mod.rs"]
 mod common;
 use common::*;
-use core::mem::MaybeUninit;
 use fasteetf::*;
 
 #[cfg(target_arch = "wasm32")]
@@ -16,19 +15,20 @@ use wasm_bindgen_test::wasm_bindgen_test as test;
 
 /// Parse `input` with a custom `Limits`, returning the error.
 fn parse_err_with_limits(input: &[u8], limits: Limits) -> EtfError {
-    let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
+    let arena = bumpalo::Bump::<16>::with_min_align_and_capacity(65536);
+    arena.set_allocation_limit(Some(65536));
     #[cfg(feature = "compression")]
     let options = ParseOptions {
         input,
         decompressed_buffer: None,
-        ast_arena: &mut arena,
+        ast_arena: &arena,
         limits,
         zlib_backend: None,
     };
     #[cfg(not(feature = "compression"))]
     let options = ParseOptions {
         input,
-        ast_arena: &mut arena,
+        ast_arena: &arena,
         limits,
     };
     parse_etf(options).unwrap_err()
@@ -293,23 +293,21 @@ fn test_truncated_new_float() {
 
 #[test]
 fn test_parse_with_misaligned_arena() {
-    // The bump allocator must align its start pointer up to max_align_t even
-    // when handed a misaligned buffer (offset by one byte here).
-    let mut buf = vec![MaybeUninit::<u8>::uninit(); 256];
-    let mis = &mut buf[1..];
+    let arena = bumpalo::Bump::<16>::with_min_align_and_capacity(256);
+    arena.set_allocation_limit(Some(256));
     let input = b"\x83\x68\x02\x61\x01\x61\x02";
     #[cfg(feature = "compression")]
     let options = ParseOptions {
         input,
         decompressed_buffer: None,
-        ast_arena: mis,
+        ast_arena: &arena,
         limits: Limits::default(),
         zlib_backend: None,
     };
     #[cfg(not(feature = "compression"))]
     let options = ParseOptions {
         input,
-        ast_arena: mis,
+        ast_arena: &arena,
         limits: Limits::default(),
     };
     let term = parse_etf(options).unwrap();

@@ -1,16 +1,23 @@
 // Truncated buffer guards — only error-path tests (no lifetime issues)
 
-use core::mem::MaybeUninit;
-use fasteetf::{EtfError, parse_etf};
+use fasteetf::{EtfError, Limits, ParseOptions, parse_etf};
 
 fn parse_err(input: &[u8]) -> EtfError {
-    let mut arena = vec![MaybeUninit::<u8>::uninit(); 65536];
-    let options = fasteetf::ParseOptions {
+    let arena = bumpalo::Bump::<16>::with_min_align_and_capacity(65536);
+    arena.set_allocation_limit(Some(65536));
+    #[cfg(feature = "compression")]
+    let options = ParseOptions {
         input,
-        ast_arena: &mut arena,
-        limits: fasteetf::Limits::default(),
         decompressed_buffer: None,
+        ast_arena: &arena,
+        limits: Limits::default(),
         zlib_backend: None,
+    };
+    #[cfg(not(feature = "compression"))]
+    let options = ParseOptions {
+        input,
+        ast_arena: &arena,
+        limits: Limits::default(),
     };
     parse_etf(options).unwrap_err()
 }

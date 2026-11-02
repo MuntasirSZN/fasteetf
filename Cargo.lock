@@ -314,6 +314,7 @@ dependencies = [
 name = "fasteetf"
 version = "0.2.0"
 dependencies = [
+ "bumpalo",
  "cloudflare-zlib-sys",
  "codspeed-divan-compat",
  "cpufeatures",

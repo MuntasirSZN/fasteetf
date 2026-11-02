@@ -23,12 +23,12 @@ fn decompresses_via_compile_time_backend() {
     let wire = compressed_etf(&inner);
 
     let mut decomp = vec![0u8; inner.len()];
-    let mut arena = make_arena();
+    let arena = make_arena();
 
     let term = parse_etf(ParseOptions {
         input: &wire,
         decompressed_buffer: Some(&mut decomp),
-        ast_arena: &mut arena,
+        ast_arena: &arena,
         limits: Limits::default(),
         // `None` ⇒ use the compile-time selected backend.
         zlib_backend: None,
@@ -56,12 +56,12 @@ fn decompresses_via_streaming_with_compile_time_backend() {
     let wire = compressed_etf(&inner);
 
     let mut decomp = vec![0u8; inner.len()];
-    let mut arena = make_arena();
+    let arena = make_arena();
 
     let term = parse_etf_streaming(ParseOptions {
         input: &wire,
         decompressed_buffer: Some(&mut decomp),
-        ast_arena: &mut arena,
+        ast_arena: &arena,
         limits: Limits::default(),
         zlib_backend: None,
     })
@@ -89,12 +89,12 @@ fn no_backend_yields_unsupported_tag() {
     let wire = compressed_etf(&inner);
 
     let mut decomp = vec![0u8; inner.len()];
-    let mut arena = make_arena();
+    let arena = make_arena();
 
     let err = parse_etf(ParseOptions {
         input: &wire,
         decompressed_buffer: Some(&mut decomp),
-        ast_arena: &mut arena,
+        ast_arena: &arena,
         limits: Limits::default(),
         zlib_backend: None,
     })
@@ -111,12 +111,12 @@ fn decompresses_via_runtime_backend() {
     let wire = compressed_etf(&inner);
 
     let mut decomp = vec![0u8; inner.len()];
-    let mut arena = make_arena();
+    let arena = make_arena();
 
     let term = parse_etf(ParseOptions {
         input: &wire,
         decompressed_buffer: Some(&mut decomp),
-        ast_arena: &mut arena,
+        ast_arena: &arena,
         limits: Limits::default(),
         // Force the use of the trait-based backend even when the crate
         // has a built-in one compiled in.
@@ -140,12 +140,12 @@ fn roundtrip_large_compressed_term() {
     let wire = compressed_etf(&inner);
 
     let mut decomp = vec![0u8; inner.len()];
-    let mut arena = make_arena();
+    let arena = make_arena();
 
     let term = parse_etf(ParseOptions {
         input: &wire,
         decompressed_buffer: Some(&mut decomp),
-        ast_arena: &mut arena,
+        ast_arena: &arena,
         limits: Limits::default(),
         zlib_backend: Some(<ZlibRsBackend as ZlibBackend>::decompress),
     })
@@ -167,12 +167,12 @@ fn undersized_decompression_buffer_is_an_error_streaming() {
 
     let wire = compressed_etf(&[97, 1]);
     let mut decomp = [0u8; 1]; // too small: the inner term is 2 bytes
-    let mut arena = make_arena();
+    let arena = make_arena();
 
     let err = parse_etf_streaming(ParseOptions {
         input: &wire,
         decompressed_buffer: Some(&mut decomp),
-        ast_arena: &mut arena,
+        ast_arena: &arena,
         limits: Limits::default(),
         zlib_backend: None,
     })
@@ -200,12 +200,12 @@ fn corrupted_payload_compile_time_backend() {
     wire.extend_from_slice(&[0xff; 5]);
 
     let mut decomp = vec![0u8; 5];
-    let mut arena = make_arena();
+    let arena = make_arena();
 
     let err = parse_etf(ParseOptions {
         input: &wire,
         decompressed_buffer: Some(&mut decomp),
-        ast_arena: &mut arena,
+        ast_arena: &arena,
         limits: Limits::default(),
         zlib_backend: None,
     })
@@ -217,12 +217,12 @@ fn corrupted_payload_compile_time_backend() {
 #[test]
 fn missing_decompression_buffer_is_an_error() {
     let wire = compressed_etf(&[97, 1]);
-    let mut arena = make_arena();
+    let arena = make_arena();
 
     let err = parse_etf(ParseOptions {
         input: &wire,
         decompressed_buffer: None,
-        ast_arena: &mut arena,
+        ast_arena: &arena,
         limits: Limits::default(),
         zlib_backend: None,
     })
@@ -235,12 +235,12 @@ fn missing_decompression_buffer_is_an_error() {
 fn undersized_decompression_buffer_is_an_error() {
     let wire = compressed_etf(&[97, 1]);
     let mut decomp = [0u8; 1]; // too small: the inner term is 2 bytes
-    let mut arena = make_arena();
+    let arena = make_arena();
 
     let err = parse_etf(ParseOptions {
         input: &wire,
         decompressed_buffer: Some(&mut decomp),
-        ast_arena: &mut arena,
+        ast_arena: &arena,
         limits: Limits::default(),
         zlib_backend: None,
     })
@@ -256,12 +256,12 @@ fn corrupted_zlib_payload_is_a_decompression_error() {
     wire.extend_from_slice(&[0xff; 5]);
 
     let mut decomp = vec![0u8; 5];
-    let mut arena = make_arena();
+    let arena = make_arena();
 
     let err = parse_etf(ParseOptions {
         input: &wire,
         decompressed_buffer: Some(&mut decomp),
-        ast_arena: &mut arena,
+        ast_arena: &arena,
         limits: Limits::default(),
         zlib_backend: Some(<ZlibRsBackend as ZlibBackend>::decompress),
     })
@@ -281,12 +281,12 @@ fn size_mismatch_with_payload_is_a_decompression_error() {
     let mut wire = vec![131, 0x50, 0, 0, 0, 3];
     wire.extend_from_slice(&compressed);
     let mut decomp = vec![0u8; 3];
-    let mut arena = make_arena();
+    let arena = make_arena();
 
     let err = parse_etf(ParseOptions {
         input: &wire,
         decompressed_buffer: Some(&mut decomp),
-        ast_arena: &mut arena,
+        ast_arena: &arena,
         limits: Limits::default(),
         zlib_backend: Some(<ZlibRsBackend as ZlibBackend>::decompress),
     })
@@ -305,12 +305,12 @@ fn runtime_backend_is_actually_called() {
     let wire = compressed_etf(&inner);
 
     let mut decomp = vec![0u8; inner.len()];
-    let mut arena = make_arena();
+    let arena = make_arena();
 
     let term = parse_etf(ParseOptions {
         input: &wire,
         decompressed_buffer: Some(&mut decomp),
-        ast_arena: &mut arena,
+        ast_arena: &arena,
         limits: Limits::default(),
         zlib_backend: Some(<CountingBackend as ZlibBackend>::decompress),
     })
