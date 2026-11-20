@@ -29,7 +29,7 @@ fuzz_target!(|data: &[u8]| {
     }
 
     // ── Step 1: Parse ─────────────────────────────────
-    let mut arena = arena_for(data.len());
+    let arena = arena_for(data.len());
     let opts = fasteetf::ParseOptions {
         input: data,
         decompressed_buffer: None,
@@ -50,7 +50,7 @@ fuzz_target!(|data: &[u8]| {
     };
 
     // ── Step 3: Re-parse ──────────────────────────────────
-    let mut arena2 = arena_for(encoded.len());
+    let arena2 = arena_for(encoded.len());
     let opts2 = fasteetf::ParseOptions {
         input: &encoded,
         decompressed_buffer: None,
