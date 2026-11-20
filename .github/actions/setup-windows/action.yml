@@ -23,70 +23,95 @@ runs:
       run: | # zizmor: ignore[github-env] This is not attacker controlled
         $ErrorActionPreference = 'Stop'
 
-        $asanDllName = 'clang_rt.asan_dynamic-x86_64.dll'
+        $vswhere = Join-Path ${env:ProgramFiles(x86)} `
+          'Microsoft Visual Studio\Installer\vswhere.exe'
 
-        # Prefer the runtime beside the linker that Rust will use.
-        $linker = Get-Command link.exe `
-          -CommandType Application `
-          -ErrorAction SilentlyContinue |
-          Select-Object -First 1
+        if (-not (Test-Path -LiteralPath $vswhere)) {
+          throw "vswhere not found: $vswhere"
+        }
 
-        if ($linker) {
-          $toolsetBinDir = Split-Path -Parent $linker.Source
-          $asanDll = Join-Path $toolsetBinDir $asanDllName
+        $installPath = & $vswhere -latest -products * `
+          -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+          -property installationPath
 
-          if (-not (Test-Path -LiteralPath $asanDll)) {
-            throw "ASan DLL not found beside the active linker: $asanDll"
+        if (-not $installPath) {
+          throw "No Visual Studio installation with VC tools found"
+        }
+
+        $toolsetRoot = Join-Path $installPath 'VC\Tools\MSVC'
+
+        # Read the default MSVC toolset version instead of selecting
+        # an arbitrary installed version.
+        $versionFile = Join-Path $installPath `
+          'VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt'
+
+        $toolsetVersion = $null
+
+        if (Test-Path -LiteralPath $versionFile) {
+          $toolsetVersion = (Get-Content -LiteralPath $versionFile -Raw).Trim()
+        }
+
+        if ($toolsetVersion) {
+          $toolsetDir = Join-Path $toolsetRoot $toolsetVersion
+
+          if (-not (Test-Path -LiteralPath $toolsetDir)) {
+            throw "Default MSVC toolset $toolsetVersion is not installed: $toolsetDir"
           }
         }
         else {
-          # Fallback: locate the latest installed MSVC toolset.
-          $vswhere = Join-Path ${env:ProgramFiles(x86)} `
-            'Microsoft Visual Studio\Installer\vswhere.exe'
-
-          if (-not (Test-Path -LiteralPath $vswhere)) {
-            throw "vswhere not found at $vswhere"
-          }
-
-          $installPath = & $vswhere -latest -products * `
-            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
-            -property installationPath
-
-          if (-not $installPath) {
-            throw "No Visual Studio installation with VC tools found"
-          }
-
-          $toolsetRoot = Join-Path $installPath 'VC\Tools\MSVC'
-
-          $toolset = Get-ChildItem -LiteralPath $toolsetRoot -Directory |
+          # Fallback for installations without the default version file.
+          $toolsetDir = Get-ChildItem -LiteralPath $toolsetRoot -Directory |
             Where-Object { $_.Name -match '^\d+(\.\d+){1,3}$' } |
             Sort-Object { [version]$_.Name } -Descending |
-            Where-Object {
-              Test-Path -LiteralPath (
-                Join-Path $_.FullName "bin\HostX64\x64\$asanDllName"
-              )
-            } |
-            Select-Object -First 1
+            Select-Object -First 1 -ExpandProperty FullName
 
-          if (-not $toolset) {
-            throw "No compatible x64 ASan runtime found under $toolsetRoot"
+          if (-not $toolsetDir) {
+            throw "No MSVC toolsets found under $toolsetRoot"
           }
 
-          $toolsetBinDir = Join-Path $toolset.FullName 'bin\HostX64\x64'
-          $asanDll = Join-Path $toolsetBinDir $asanDllName
-
-          # Make the selected toolset available to subsequent steps.
-          Add-Content -Path $env:GITHUB_PATH -Value $toolsetBinDir
+          $toolsetVersion = Split-Path -Leaf $toolsetDir
         }
 
-        if (-not (Test-Path -LiteralPath $asanDll)) {
-          throw "ASan runtime does not exist: $asanDll"
+        $toolsetBinDir = Join-Path $toolsetDir 'bin\HostX64\x64'
+
+        $asanDll = Join-Path $toolsetBinDir `
+          'clang_rt.asan_dynamic-x86_64.dll'
+
+        $linker = Join-Path $toolsetBinDir 'link.exe'
+        $dumpbin = Join-Path $toolsetBinDir 'dumpbin.exe'
+
+        foreach ($path in @($asanDll, $linker, $dumpbin)) {
+          if (-not (Test-Path -LiteralPath $path)) {
+            throw "Required MSVC toolchain file not found: $path"
+          }
         }
 
-        $asanDir = Split-Path -Parent $asanDll
+        # Make sure the DLL exports the function required by the
+        # Rust/libFuzzer ASan thunk.
+        $exports = & $dumpbin /nologo /exports $asanDll 2>&1 |
+          Out-String
 
-        Add-Content -Path $env:GITHUB_PATH -Value $asanDir
+        if ($LASTEXITCODE -ne 0) {
+          throw "Failed to inspect ASan DLL exports: $asanDll"
+        }
 
-        Write-Host "Using MSVC linker: $($linker.Source)"
-        Write-Host "Using ASan runtime: $asanDll"
+        if ($exports -notmatch '(?m)\b__sanitizer_weak_hook_memcmp\b') {
+          throw @"
+        The MSVC ASan runtime does not export __sanitizer_weak_hook_memcmp.
+
+        Toolset: $toolsetVersion
+        DLL: $asanDll
+
+        Update the MSVC toolset to a compatible version.
+        "@
+        }
+
+        # Put the matching MSVC tools and ASan runtime ahead of Git's
+        # usr\bin directory so link.exe resolves to the actual MSVC linker.
+        Add-Content -Path $env:GITHUB_PATH -Value $toolsetBinDir
+
+        Write-Host "MSVC toolset: $toolsetVersion"
+        Write-Host "MSVC linker: $linker"
+        Write-Host "ASan runtime: $asanDll"
+        Write-Host "Verified export: __sanitizer_weak_hook_memcmp"
 
