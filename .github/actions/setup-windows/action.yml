@@ -1,8 +1,8 @@
+
 name: Setup Windows
 description: >-
   Enable Git long paths. With the `asan` input set to `true`, also add the
-  MSVC AddressSanitizer runtime DLL directory (next to cl.exe) to PATH so
-  ASan-instrumented tests can run.
+  matching MSVC AddressSanitizer runtime DLL directory to PATH.
 
 inputs:
   asan:
@@ -17,32 +17,76 @@ runs:
       shell: powershell
       run: git config --system core.longpaths true
 
-    - name: Add ASan DLL to PATH
+    - name: Add matching ASan DLL to PATH
       if: inputs.asan == 'true'
       shell: powershell
       run: | # zizmor: ignore[github-env] This is not attacker controlled
-        $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-        if (-not (Test-Path $vswhere)) {
-          Write-Error "vswhere not found at $vswhere"
-          exit 1
-        }
-        $installPath = & $vswhere -latest -products * `
-          -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
-          -property installationPath
-        if (-not $installPath) {
-          Write-Error "No Visual Studio installation with the VC toolset found"
-          exit 1
-        }
-        # MSVC ships the ASan runtime next to cl.exe (rustc links it via
-        # /INFERASANLIBS); the DLL must be on PATH to run instrumented tests.
-        $asanDll = Get-ChildItem `
-          -Path (Join-Path $installPath 'VC\Tools\MSVC\*\bin\Host*\x64\clang_rt.asan_dynamic-*.dll') `
+        $ErrorActionPreference = 'Stop'
+
+        $asanDllName = 'clang_rt.asan_dynamic-x86_64.dll'
+
+        # Prefer the runtime beside the linker that Rust will use.
+        $linker = Get-Command link.exe `
+          -CommandType Application `
           -ErrorAction SilentlyContinue |
           Select-Object -First 1
-        if (-not $asanDll) {
-          Write-Error "clang_rt.asan_dynamic-*.dll not found under $installPath"
-          exit 1
+
+        if ($linker) {
+          $toolsetBinDir = Split-Path -Parent $linker.Source
+          $asanDll = Join-Path $toolsetBinDir $asanDllName
+
+          if (-not (Test-Path -LiteralPath $asanDll)) {
+            throw "ASan DLL not found beside the active linker: $asanDll"
+          }
         }
-        $asanDir = $asanDll.DirectoryName
+        else {
+          # Fallback: locate the latest installed MSVC toolset.
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} `
+            'Microsoft Visual Studio\Installer\vswhere.exe'
+
+          if (-not (Test-Path -LiteralPath $vswhere)) {
+            throw "vswhere not found at $vswhere"
+          }
+
+          $installPath = & $vswhere -latest -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -property installationPath
+
+          if (-not $installPath) {
+            throw "No Visual Studio installation with VC tools found"
+          }
+
+          $toolsetRoot = Join-Path $installPath 'VC\Tools\MSVC'
+
+          $toolset = Get-ChildItem -LiteralPath $toolsetRoot -Directory |
+            Where-Object { $_.Name -match '^\d+(\.\d+){1,3}$' } |
+            Sort-Object { [version]$_.Name } -Descending |
+            Where-Object {
+              Test-Path -LiteralPath (
+                Join-Path $_.FullName "bin\HostX64\x64\$asanDllName"
+              )
+            } |
+            Select-Object -First 1
+
+          if (-not $toolset) {
+            throw "No compatible x64 ASan runtime found under $toolsetRoot"
+          }
+
+          $toolsetBinDir = Join-Path $toolset.FullName 'bin\HostX64\x64'
+          $asanDll = Join-Path $toolsetBinDir $asanDllName
+
+          # Make the selected toolset available to subsequent steps.
+          Add-Content -Path $env:GITHUB_PATH -Value $toolsetBinDir
+        }
+
+        if (-not (Test-Path -LiteralPath $asanDll)) {
+          throw "ASan runtime does not exist: $asanDll"
+        }
+
+        $asanDir = Split-Path -Parent $asanDll
+
         Add-Content -Path $env:GITHUB_PATH -Value $asanDir
-        Write-Host "Added $asanDir to PATH"
+
+        Write-Host "Using MSVC linker: $($linker.Source)"
+        Write-Host "Using ASan runtime: $asanDll"
+
