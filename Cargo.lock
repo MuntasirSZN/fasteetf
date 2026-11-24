@@ -441,7 +441,7 @@ dependencies = [
 [[package]]
 name = "kani"
 version = "0.68.0"
-source = "git+https://github.com/model-checking/kani#98c3cd88bc6b5404011363b7f38ea32c3ba1f6c7"
+source = "git+https://github.com/model-checking/kani#bd74dd6fa59abb71282564009c3fac8e7d5caea3"
 dependencies = [
  "kani_core",
  "kani_macros",
@@ -450,7 +450,7 @@ dependencies = [
 [[package]]
 name = "kani_core"
 version = "0.68.0"
-source = "git+https://github.com/model-checking/kani#98c3cd88bc6b5404011363b7f38ea32c3ba1f6c7"
+source = "git+https://github.com/model-checking/kani#bd74dd6fa59abb71282564009c3fac8e7d5caea3"
 dependencies = [
  "kani_macros",
 ]
@@ -458,12 +458,11 @@ dependencies = [
 [[package]]
 name = "kani_macros"
 version = "0.68.0"
-source = "git+https://github.com/model-checking/kani#98c3cd88bc6b5404011363b7f38ea32c3ba1f6c7"
+source = "git+https://github.com/model-checking/kani#bd74dd6fa59abb71282564009c3fac8e7d5caea3"
 dependencies = [
  "proc-macro2",
  "proc-macro2-diagnostics",
  "quote",
- "strum",
  "strum_macros",
  "syn 2.0.119",
 ]
@@ -832,12 +831,6 @@ dependencies = [
  "approx",
  "num-traits",
 ]
-
-[[package]]
-name = "strum"
-version = "0.28.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9628de9b8791db39ceda2b119bbe13134770b56c138ec1d3af810d045c04f9bd"
 
 [[package]]
 name = "strum_macros"
